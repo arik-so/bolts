@@ -653,6 +653,10 @@ to send the used nonces along side each signature. Remember that in order to
 validate a partial signature, and even combine a partial signature, the set of
 public nonces MUST be known.
 
+If a party needs to send a `revoke_and_ack` message, the included
+`local_musig2_pubnonce` will _replace_ the nonce sent with the prior
+`channel_reestablish` message.
+
 If we didn't uphold this requirement, both sides would need to write to disk an
 _authenticated_ nonce (carries a digital signature) in order to convince the
 remote party that they generated this nonce in the first place (remember no
