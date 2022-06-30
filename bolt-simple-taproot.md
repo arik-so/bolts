@@ -571,12 +571,28 @@ signature.
 
 ### Channel Operation
 
-#### `commit_sig` Extensions
+#### `commitment_signed` Extensions
+
+A new TLV stream is added to the `commitment_signed` message:
+
+1. type: 132 (`commitment_signed`)
+2. data:
+    * ...
+    * [`commitment_signed_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `commitment_signed_tlvs`
+2. types:
+    1. type: 2 (`remote_musig2_pubnonce`)
+    2: data:
+        * [`66*byte`:`nonces`]
 
 The main commitment `signature` attached in the message is now a `bip-musig2`
 _partial_ schnorr signature. Using the `secnonce` generated upon connection
 re-establishment or funding confirmation, the partial signature is generated
 with the `Sign` algorithm specified in the `musig2` BIP.
+
+When creating a new signature, the sender attaches their _remote_ nonce which
+allows the receiver to generate an additional commitment.
 
 ##### Requirements
 
@@ -612,7 +628,7 @@ A new TLV stream is added to the `revoke_and_ack` message:
 
 1. `tlv_stream`: `revoke_and_ack_tlvs`
 2. types:
-    1. type: 2 (`musig2_pubnonce`)
+    1. type: 2 (`local_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
 
