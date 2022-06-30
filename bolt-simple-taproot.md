@@ -54,16 +54,16 @@ Created: 2022-04-20
 - [Test Vectors](#test-vectors)
 - [Acknowledgements](#acknowledgements)
 
-# Introduction 
+# Introduction
 
-## Abstract 
+## Abstract
 
 
 The activation of the Taproot soft-fork suite enables a number of updates to
 the Lightning Network, allowing developers to improve the privacy, security,
-and flexibility of the system.  This document specifies extensions to BOLTs 2,
+and flexibility of the system. This document specifies extensions to BOLTs 2,
 3, and 5 which describe a new Taproot based channels to update to the Lightning
-Network to take advantage of _some_ of these new capabilities.  Namely, we
+Network to take advantage of _some_ of these new capabilities. Namely, we
 mechanically translate the current funding and commitment design to utilize
 `musig2` and the new tapscript tree capabilities.
 
@@ -150,7 +150,7 @@ A `tap_branch` can commit to either a `tap_leaf` or `tap_branch`. Before
 hashing, a `tap_branch` sorts the two `tap_node` arguments based on
 lexicographical ordering:
 ```
-tagged_hash("TapBranch, sort(node_1, node_2)
+tagged_hash("TapBranch", sort(node_1, node_2))
 ```
 
 A tapscript tree is constructed by hashing each pair of leaves into a
@@ -171,7 +171,7 @@ script path.
 [BIP 86](https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki) defines a taproot output key derivation scheme that wherein only the internal
 key is committed to without a script root:
 ```
-taproot_output_key = taproot_internal_key  + tagged_hash("TapTweak", taproot_internal_key)*G
+taproot_output_key = taproot_internal_key + tagged_hash("TapTweak", taproot_internal_key)*G
 ```
 
 We use BIP 86 whenever we want to ensure that a script path spend isn't
@@ -219,7 +219,7 @@ will be absent.
 
 The final witness to spend a script path output is:
 ```
-control_block || leaf_script || witness
+<witness1> ... <witnessN> <leaf_script> <control_block>
 ```
 
 ### MuSig2
@@ -396,7 +396,7 @@ The sending node:
 The sending node SHOULD:
 
   - use the `NonceGen` algorithm defined in `bip-musig2` to generate
-    `lcaol_musig2_pubnonce` and `remote_musig2_pubnonce` to  ensure it
+    `local_musig2_pubnonce` and `remote_musig2_pubnonce` to ensure it
     generates nonces in a safe manner.
 
 The receiving node MUST fail the channel if:
@@ -416,7 +416,7 @@ step.
 
 The `remote_musig2_pubnonce` will be used to sign the _remote_ party's
 commitment transaction, while the `local_musig2_pubnonce` will be used to sign
-the local party's commitment transaction. 
+the local party's commitment transaction.
 
 We require two nonces, as there're actually two messages being signed: the
 local commitment and the remote commitment. If only one nonce was used, when a
@@ -454,7 +454,7 @@ The receiver:
 
 The sender:
 
-  - MUST derive the aggregated `musig2` public key using the exchanged `funding_pubkey`s 
+  - MUST derive the aggregated `musig2` public key using the exchanged `funding_pubkey`s
     - Before aggregating the two funding public keys, the keys MUST be sorted
       using the `KeySort` routine of `bip-musig2`.
 
@@ -610,7 +610,7 @@ The receiver MUST:
   - Fail the channel if the received schnorr partial signature failed to verify
     using the `PartialSigVerify` paramterized with the local combined nonce
     (`local_musig2_pubnonce` of the verifying party, and the
-    `remote_musig2_pubnonce` of the sending party) algorithm of `musig2` .
+    `remote_musig2_pubnonce` of the sending party) algorithm of `musig2`.
 
   - Fail the channel is _any_ of the received HTLC signatures does not validate
     according to the message extensions and sighash algorithm described in BIP
@@ -713,15 +713,12 @@ The new output has the following form:
 
   * `OP_1 to_local_output_key`
   * where:
-    * `to_local_output_key = <revocationpubkey> + tagged_hash("TapTweak", <revocationpubkey> || to_delay_script_root`
+    * `to_local_output_key = revocationpubkey + tagged_hash("TapTweak", revocationpubkey || to_delay_script_root)`
     * `to_delay_script_root = tapscript_root([to_delay_script])`
     * `to_delay_script` is the delay script:
         ```
-        to_self_delay
-        OP_CHECKSEQUENCEVERIFY
-        OP_DROP
-        <local_delayedpubkey>
-        OP_CHECKSIGVERIFY
+        <local_delayedpubkey> OP_CHECKSIG
+        <to_self_delay> OP_CHECKSEQUENCEVERIFY OP_DROP
         ```
 
 The parity (even or odd) of the y-coordinate of the derived
@@ -731,7 +728,7 @@ The `tapscript_root` routine constructs a valid taproot commitment according to
 BIP 341+342. Namely, a leaf version of `0xc0` MUST be used. As there's only a
 single script, one can derive the tapscript root as:
 ```
-tapscript_root = tagged_hash("TapLeaf, 0xc0 || compact_size_of(to_delay_script) || to_delay_script)
+tapscript_root = tagged_hash("TapLeaf", 0xc0 || compact_size_of(to_delay_script) || to_delay_script)
 ```
 
 In the case of a commitment breach, the `to_delay_script_root` can be used
@@ -742,23 +739,23 @@ top-level key spend path. A valid witness is then just:
 ```
 
 In the case of a routine force close, the script path must be revealed so the
-broadcaster can sweep their funds after a delay.  The control block to spend is
+broadcaster can sweep their funds after a delay. The control block to spend is
 only `33` bytes, as it just includes the internal key (along with the y-parity
 bit and leaf version):
 ```
-delay_control_block = (parity_of_y | 0x0c) || <revocationpubkey>
+delay_control_block = (output_key_y_parity | 0xc0) || revocationpubkey
 ```
 
 A valid witness is then:
 ```
-<delay_control_block> <to_delay_script> <local_delayedsig>
+<local_delayedsig> <to_delay_script> <delay_control_block>
 ```
 
-A with base channels, the `nSequence` field must be set to `to_self_delay`.
+As with base channels, the `nSequence` field must be set to `to_self_delay`.
 
 #### To Remote Outputs
 
-As we inheirit the anchor output semmeantics we want to ensure that the remote
+As we inherit the anchor output semantics we want to ensure that the remote
 party can unilaterally sweep their funds after the 1 block CSV delay. In order
 to achieve this property, we'll utilize a NUMs point (`simple_taproot_nums`) By
 using this point as the internal key, we ensure that the remote party isn't
@@ -769,21 +766,22 @@ The to remote output has the following form:
   * `OP_1 to_remote_output_key`
   * where:
     * `taproot_nums_point = 0245b18183a06ee58228f07d9716f0f121cd194e4d924b037522503a7160432f15`
-    * `to_remote_output_key = taproot_nums_point + tagged_hash("TapTweak", taproot_nums_point|| to_remote_script_root`
+    * `to_remote_output_key = taproot_nums_point + tagged_hash("TapTweak", taproot_nums_point || to_remote_script_root)`
     * `to_remote_script_root = tapscript_root([to_remote_script])`
     * `to_remote_script` is the remote script:
         ```
-        <remotepubkey> OP_CHECKSIGVERIFY 1 OP_CHECKSEQUENCEVERIFY
+        <remotepubkey> OP_CHECKSIG
+        OP_CHECKSEQUENCEVERIFY
         ```
 
 This output can be swept by the remote party with the following witness:
 ```
-<to_remote_control_block> <to_remote_script> <remote_sig>
+<remote_sig> <to_remote_script> <to_remote_control_block>
 ```
 
 where `to_remote_control_block` is:
 ```
-(parity_of_y(remotepubkey) | 0x0c) || <remotepubkey>
+(output_key_y_parity | 0xc0) || taproot_nums_point
 ```
 
 #### Anchor Outputs
@@ -798,12 +796,24 @@ An anchor output has the following form:
   * `OP_1 anchor_output_key`
   * where:
     * `anchor_internal_key = remotepubkey/local_delayedpubkey`
-    * `anchor_output_key= anchor_internal_key + tagged_hash("TapTweak", anchor_internal_key || anchor_script_root)`
-    * `anchor_script = tapscript_root([anchor_script])`
+    * `anchor_output_key = anchor_internal_key + tagged_hash("TapTweak", anchor_internal_key || anchor_script_root)`
+    * `anchor_script_root = tapscript_root([anchor_script])`
     * `anchor_script`:
         ```
         OP_16 OP_CHECKSEQUENCEVERIFY
         ```
+
+This output can be swept by anyone after 16 blocks with the following witness:
+```
+<anchor_script> <anchor_control_block>
+```
+
+where `anchor_control_block` is:
+```
+(output_key_y_parity | 0xc0) || anchor_internal_key
+```
+
+`nSequence` needs to be set to 16.
 
 ### HTLC Scripts & Transactions
 
@@ -821,15 +831,14 @@ An offered HTLC has the following form:
     * `htlc_script_root = tapscript_root([htlc_timeout, htlc_success])`
     * `htlc_timeout`:
         ```
-        <local_htlcpubkey> OP_CHECKSIGADD <remote_htlcpubkey> OP_CHECKSIGADD 2 OP_EQUALVERIFY
-        1 OP_CHECKSEQUENCEVERIFY
+        <local_htlcpubkey> OP_CHECKSIGVERIFY
+        <remote_htlcpubkey> OP_CHECKSIG
         ```
     * `htlc_success`:
         ```
         OP_SIZE 32 OP_EQUALVERIFY OP_HASH160 <RIPEMD160(payment_hash)> OP_EQUALVERIFY
-        <remote_htlcpubkey>
-        OP_CHECKSIGVERIFY
-        1 OP_CHECKSEQUENCEVERIFY
+        <remote_htlcpubkey> OP_CHECKSIG
+        OP_CHECKSEQUENCEVERIFY
         ```
 
 In order to spend a offered HTLC, via either script path, an `inclusion_proof`
@@ -846,18 +855,20 @@ Accepted HTLCs inherit a similar format:
     * `htlc_script_root = tapscript_root([htlc_timeout, htlc_success])`
     * `htlc_timeout`:
         ```
-        <remote_htlcpubkey>
-        OP_CHECKSIGVERIFY
-        1 OP_CHECKSEQUENCEVERIFY OP_DROP
-        <cltv_expiry>
-        OP_CHECKLOCKTIMEVERIFY
+        <remote_htlcpubkey> OP_CHECKSIG
+        OP_CHECKSEQUENCEVERIFY
+        <cltv_expiry> OP_CHECKLOCKTIMEVERIFY OP_DROP
         ```
     * `htlc_success`:
         ```
         OP_SIZE 32 OP_EQUALVERIFY OP_HASH160 <RIPEMD160(payment_hash)> OP_EQUALVERIFY
-        <local_htlcpubkey> OP_CHECKSIGADD <remote_htlcpubkey> OP_CHECKSIGADD 2 OP_EQUALVERIFY
-        1 OP_CHECKSEQUENCEVERIFY
+        <local_htlcpubkey> OP_CHECKSIGVERIFY
+        <remote_htlcpubkey> OP_CHECKSIG
         ```
+
+Note that there is no `OP_CHECKSEQUENCEVERIFY` in the offered HTLC's timeout path
+and in the accepted HTLC's success path. This is not needed here as these paths
+require a remote signature that commits to the sequence, which needs to be set at 1.
 
 In order to spend an accepted HTLC, via either script path, an
 `inclusion_proof` must be specified along with the control block. This
@@ -886,7 +897,8 @@ A HTLC-Success transaction has the following structure:
   * input:
     * txid: commitment_tx
     * vout: htlc_index
-    * witness: `control_block || htlc_success_script || <localsig> <remotesig> <preimage>`
+    * sequence: 1
+    * witness: `<remotehtlcsig> <localhtlcsig> <preimage> <htlc_success_script> <control_block>`
   * output:
     * value: htlc_value
     * script:
@@ -896,10 +908,8 @@ A HTLC-Success transaction has the following structure:
         * `htlc_script_root = tapscript_root([htlc_success])`
         * `htlc_success`:
         ```
-        <local_delayedpubkey>
-        OP_CHECKSIGVERIFY
-        <to_self_delay>
-        OP_CHECKSEQUENCEVERIFY
+        <local_delayedpubkey> OP_CHECKSIG
+        <to_self_delay> OP_CHECKSEQUENCEVERIFY OP_DROP
         ```
 
 ##### HTLC-Timeout Transactions
@@ -911,7 +921,8 @@ A HTLC-Timeout transaction has the following structure:
   * input:
     * txid: commitment_tx
     * vout: htlc_index
-    * witness: `control_block || htlc_timeout_script || <localsig> <remotesig>`
+    * sequence: 1
+    * witness: `<remotehtlcsig> <localhtlcsig> <htlc_timeout_script> <control_block>`
   * output:
     * value: htlc_value
     * script:
@@ -921,10 +932,8 @@ A HTLC-Timeout transaction has the following structure:
         * `htlc_script_root = tapscript_root([htlc_timeout])`
         * `htlc_timeout`:
         ```
-        <local_delayedpubkey>
-        OP_CHECKSIGVERIFY
-        <to_self_delay>
-        OP_CHECKSEQUENCEVERIFY
+        <local_delayedpubkey> OP_CHECKSIG
+        <to_self_delay> OP_CHECKSEQUENCEVERIFY OP_DROP
         ```
 
 # Appendix
