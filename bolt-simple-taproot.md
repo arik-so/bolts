@@ -2,7 +2,7 @@
 
 Authors:
   * Olaoluwa Osuntokun <roasbeef@lightning.engineering>
-  * Eugene Siegel <eugene@lightning.engineerg>
+  * Eugene Siegel <eugene@lightning.engineering>
 
 Created: 2022-04-20
 
@@ -268,7 +268,7 @@ signer.
 
 For nonce generation, we refer to the `NonceGen` algorithm defined in the
 `musig2` BIP. We only specify the set of required arguments, though a signer
-can also opt to specify the additional argument sin order to strengthen their
+can also opt to specify the additional argument in order to strengthen their
 nonce.
 
 #### Nonce Handling
