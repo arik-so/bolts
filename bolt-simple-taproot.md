@@ -397,7 +397,7 @@ The receiving node MUST fail the channel if:
 For the initial Taproot channel type (`option_simple_taproot`), musig2 nonces
 must be exchanged in the first round trip (open->, <-accept) to ensure that the
 initiator is able to generate a valid musig2 partial signature at the next
-step.
+step once the transaction to be signed is fully specified. 
 
 The `remote_musig2_pubnonce` will be used to sign the _remote_ party's
 commitment transaction, while the `local_musig2_pubnonce` will be used to sign
@@ -587,8 +587,8 @@ The sender MUST:
    funding, and the local `secnonce` along with the combined aggregated public
    nonce.
 
- - Generate each HTLC signature according to BIP 342, as a _normal_ BIP 340
-   schnorr signature.
+ - Generate each HTLC signature according to BIP 342, as a BIP 340
+   schnorr signature (non partial).
 
 The receiver MUST:
 
