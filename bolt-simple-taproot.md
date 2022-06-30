@@ -337,7 +337,7 @@ level, which will eventually matter once PTLCs are fully rolled out.
 
 | Bits  | Name                             | Description                                               | Context  | Dependencies      | Link                                  |
 |-------|----------------------------------|-----------------------------------------------------------|----------|-------------------|---------------------------------------|
-| 50/51 | `option_simple_taproot`| Node supports simple taproot chanenls | INC | `option_channel_type`+`option_anchors` | TODO(roasbeef): link |
+| 50/51 | `option_simple_taproot`| Node supports simple taproot chanenls | IC | `option_channel_type`+`option_anchors` | TODO(roasbeef): link |
 
 The Context column decodes as follows:
  * `I`: presented in the `init` message.
