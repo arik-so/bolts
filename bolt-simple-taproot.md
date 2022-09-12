@@ -253,7 +253,7 @@ be combined into a final signature.
 We refer to the of `KeyAgg` algorithm [bip-musig2](https://github.com/jonasnick/bips/blob/musig2/bip-musig2.mediawiki)
 for key aggregation. In order to avoid sending extra ordering information, we
 always assume that both keys are sorted first with the `KeySort` algorithm
-before aggregating (`KeyAgg(KeySort(p1, p2))`)>
+before aggregating (`KeyAgg(KeySort(p1, p2))`).
 
 #### Nonce Generation
 
@@ -284,6 +284,28 @@ Finally, due to the asymmetric state of the current revocation channels, we
 actually require two sets of public nonces to be exchanged by each party: one
 for the local commitment, and one for the remote commitment.
 
+#### Nonce Terminology
+
+At all times, there exist _two_ nonces associated with a given commitment
+state: the signing nonce, and the verification nonce. 
+
+A peer's signing nonce is used to generate new commitments for the remote
+party.  Each time a party signs a commitment, they send another signing nonce
+to the remote party.
+
+A peer's verification nonce is used to verify incoming commitments sent by the
+remote party. Once a peer verifies and revoke a new commitment, another
+verification nonce is sent to the remote party.
+
+Both sides will maintain a `musig2` sessions for their local commitment and the
+commitment of the remote party. A peer's local commitment uses their
+verification nonce, and the signing nonce of the remote party. The remote
+commitment of the channel peer uses the peer's signing nonce, and their
+verification nonce.
+
+In order to sign and broadcast a new commitment to force close a channel, a
+peer uses their _verification_ nonce to generate their final signature.
+
 #### Signing
 
 Once public nonces have been exchanged, the `NonceAgg` algorithm is used to
@@ -295,6 +317,14 @@ The `Sign` is used to generate a valid partial signature, with the
 
 Once all partial signatures are known, the `PartialSigAgg` algorithm is used to
 combine the partial signature into a final valid BIP 340 schnorr signature.
+
+##### Partial Signature Encoding
+
+A `musig2` partial signature is simply the encoding of the `s` value which is
+32 byte element modulo the order of the group. Throughout this specification,
+in order to be able to re-use the existing 64-byte signature field, partial
+signatures are also encoded with 64 bytes by also encoding the x-coordinate of
+the _final_ nonce (`R1+b*R2`).
 
 ## Design Overview
 
@@ -312,7 +342,7 @@ restriction.
 The local output of the commitment transaction uses the revocation key as the
 taproot internal key, and commits to a single script path of the delay script.
 
-The remote output of the commitment transaction uses the `simple_taproot_nums`
+The remote output of the commitment transaction uses the `combined_funding_key`
 as the top-level internal key, and then commits to a normal remote script.
 
 Anchor outputs use the respective local and remote keys from the commitment
@@ -350,8 +380,8 @@ The Context column decodes as follows:
 The `option_simple_taproot` feature bit also becomes a defined channel type
 feature bit for explicit channel negotiation.
 
-Thought this document, we assume that `option_simple_taproot` was negotiated,
-and also the `option_simple_taproot` channel type is used.
+Throughout this document, we assume that `option_simple_taproot` was
+negotiated, and also the `option_simple_taproot` channel type is used.
 
 ### Channel Funding
 
@@ -364,10 +394,10 @@ We add `option_simple_taproot` to the set of defined channel types.
 
 1. `tlv_stream`: `open_channel_tlvs`
 2. types:
-    1. type: 2 (`local_musig2_pubnonce`)
+    1. type: 2 (`verification_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
-    1. type: 4 (`remote_musig2_pubnonce`)
+    1. type: 4 (`signing_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
 
@@ -375,19 +405,19 @@ We add `option_simple_taproot` to the set of defined channel types.
 
 The sending node:
 
-  - MUST specify the `local_musig2_pubnonce` and `remote_musig2_pubnonce` TLV
-    fields.
+  - MUST specify the `signing_musig2_pubnonce` and
+    `verification_musig2_pubnonce` TLV fields.
 
 The sending node SHOULD:
 
   - use the `NonceGen` algorithm defined in `bip-musig2` to generate
-    `local_musig2_pubnonce` and `remote_musig2_pubnonce` to ensure it
+    `signing_musig2_pubnonce` and `verification_musig2_pubnonce` to ensure it
     generates nonces in a safe manner.
 
 The receiving node MUST fail the channel if:
 
-  - the message doesn't include a `local_musig2_pubnonce` and
-    `remote_musig2_pubnonce` value.
+  - the message doesn't include a `signing_musig2_pubnonce` and
+    `verification_musig2_pubnonce` value.
 
   - a specified public nonce cannot be parsed as two compressed secp256k1
     points
@@ -399,9 +429,11 @@ must be exchanged in the first round trip (open->, <-accept) to ensure that the
 initiator is able to generate a valid musig2 partial signature at the next
 step once the transaction to be signed is fully specified. 
 
-The `remote_musig2_pubnonce` will be used to sign the _remote_ party's
-commitment transaction, while the `local_musig2_pubnonce` will be used to sign
-the local party's commitment transaction.
+The `signing_musig2_pubnonce` will be used to sign the _remote_ party's
+commitment transaction, while the `verification_musig2_pubnonce` will be used
+to verify incoming commitment signatures. At force close broadcast time, the
+verification nonce is then used to sign the local party's commitment
+transaction.
 
 We require two nonces, as there're actually two messages being signed: the
 local commitment and the remote commitment. If only one nonce was used, when a
@@ -412,10 +444,10 @@ nonce, as the nonce was already used to sign the remote party's commitment.
 
 1. `tlv_stream`: `accept_channel_tlvs`
 2. types:
-    1. type: 2 (`local_musig2_pubnonce`)
+    1. type: 2 (`verification_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
-    1. type: 4 (`remote_musig2_pubnonce`)
+    1. type: 4 (`signing_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
 
@@ -423,7 +455,7 @@ nonce, as the nonce was already used to sign the remote party's commitment.
 
 The sender:
 
- - MUST set `local_musig2_pubnonce` and `remote_musig2_pubnonce` to the
+ - MUST set `verification_musig2_pubnonce` and `signing_musig2_pubnonce` to the
    `musig2` public nonce as specified by the `NonceGen` algorithm of
    `bip-musig2`
 
@@ -432,8 +464,8 @@ The sender:
 
 The receiver:
 
- - MUST reject the channel if `local_musig2_pubnonce` or
-   `remote_musig2_pubnonce` are not present.
+ - MUST reject the channel if `signing_musig2_pubnonce` or
+   `verification_musig2_pubnonce` are not present.
 
 #### `funding_created` Extensions
 
@@ -443,22 +475,27 @@ The sender:
     - Before aggregating the two funding public keys, the keys MUST be sorted
       using the `KeySort` routine of `bip-musig2`.
 
-  - MUST use the exchanged `local_musig2_pubnonce` and `remote_musig2_pubnonce`
-    received from the remote party with the `NonceAgg` algorithm to derive the
-    combined nonce
-
+  - MUST use the exchanged `signing_musig2_pubnonce` and
+    `verification_musig2_pubnonce` received from the remote party with the
+    `NonceAgg` algorithm to derive the combined nonce. 
+    - Local commitment combined nonce: `NonceAgg(verificationNonce, signingNonce)`
+        - Where `verificationNonce` is the local party's and `signingNonce` is
+          the remote party's.
+    - Remote Commitment combined nonce: `NonceAgg(signingNonce, verificationNonce)`
+        - Where `signingNonce` is the local party's and `verificationNonce` is
+          the remote party's.
   - the `signature` field MUST be a `musig2` partial signature using the
-    aggregated key defined above, and the two public nonces exchanged in prior
-    messages.
+    aggregated key defined above (serialized according to the Partial Signature
+    Encoding section), and the two public nonces exchanged in prior messages.
 
   - MUST generate the attached `signature` using the combined
-    `remote_musig2_pubnonce` it generated in the prior step.
-
+    Remote commitment combined nonce it generated in the prior step.
 
 The recipient:
+  - MUST validate that the 
   - MUST validate the signature as a _partial_ signature based on the
-    `PartialSigVerifyInternal` (using the combined nonce for the remote party's
-    commitment) algorithm of `bip-musig2`:
+    `PartialSigVerifyInternal` (using the verification nonce of the local
+    party) algorithm of `bip-musig2`:
 
     - if the partial signature is invalid, MUST fail the channel
 
@@ -467,7 +504,7 @@ The recipient:
 The sender MUST set:
 
   - `signature` to the valid signature, using its `funding_pubkey` for the
-    initial commitment transaction, as defined in this documewnt.
+    initial commitment transaction, as defined in this documnt.
     - this signature MUST be a partial signature as defined by `bip-musig2`.
 
 The recipient:
@@ -488,25 +525,25 @@ We add a new TLV field to the `funding_locked` message:
 
 1. `tlv_stream`: `funding_locked_tlvs`
 2. types:
-    1. type: 0 (`local_musig2_pubnonce`)
+    1. type: 0 (`verification_musig2_pubnonce`)
     2. data:
         * [`musig2_pubnonce`:`nonces`]
-    1. type: 2 (`remote_musig2_pubnonce`)
+    1. type: 2 (`signing_musig2_pubnonce`)
     2. data:
         * [`musig2_pubnonce`:`nonces`]
 
 Similar to the `next_per_commitment_point`, by sending the `musig2_pubnonce`
 value in this message, we ensure that the remote party has our public nonce
 which is required to generate a new commitment signature. Similarly, we can't
-generate a new signature until we receive their `local_musig2_pubnonce` and
-`remote_musig2_pubnonce`.
+generate a new signature until we receive their `verification_musig2_pubnonce`
+and `signing_musig2_pubnonce`.
 
 ##### Requirements
 
 The sender MUST:
 
- - MUST set `local_musig2_pubnonce` and `remote_musig2_pubnonce` to a _fresh_
-   set of public nonces as specified by `bip-musig2`
+ - MUST set `verification_musig2_pubnonce` and `signing_musig2_pubnonce` to a
+   _fresh_ set of public nonces as specified by `bip-musig2`
 
 The receiver MUST:
 
@@ -582,7 +619,7 @@ A new TLV stream is added to the `commitment_signed` message:
 
 1. `tlv_stream`: `commitment_signed_tlvs`
 2. types:
-    1. type: 2 (`remote_musig2_pubnonce`)
+    1. type: 2 (`signing_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
 
@@ -591,7 +628,7 @@ _partial_ schnorr signature. Using the `secnonce` generated upon connection
 re-establishment or funding confirmation, the partial signature is generated
 with the `Sign` algorithm specified in the `musig2` BIP.
 
-When creating a new signature, the sender attaches their _remote_ nonce which
+When creating a new signature, the sender attaches their _signing_ nonce which
 allows the receiver to generate an additional commitment.
 
 ##### Requirements
@@ -610,8 +647,8 @@ The receiver MUST:
 
   - Fail the channel if the received schnorr partial signature failed to verify
     using the `PartialSigVerify` paramterized with the local combined nonce
-    (`local_musig2_pubnonce` of the verifying party, and the
-    `remote_musig2_pubnonce` of the sending party) algorithm of `musig2`.
+    (`verification_musig2_pubnonce` of the verifying party, and the
+    `signing_musig2_pubnonce` of the sending party) algorithm of `musig2`.
 
   - Fail the channel is _any_ of the received HTLC signatures does not validate
     according to the message extensions and sighash algorithm described in BIP
@@ -628,7 +665,7 @@ A new TLV stream is added to the `revoke_and_ack` message:
 
 1. `tlv_stream`: `revoke_and_ack_tlvs`
 2. types:
-    1. type: 2 (`local_musig2_pubnonce`)
+    1. type: 2 (`verification_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
 
@@ -650,10 +687,10 @@ A new TLV is stream is added to the `channel_reestablish` message:
 
 1. `tlv_stream`: `channel_reestablish_tlvs`
 2. types:
-    1. type: 2 (`local_musig2_pubnonce`)
+    1. type: 2 (`verification_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
-    1. type: 4 (`remote_musig2_pubnonce`)
+    1. type: 4 (`signing_musig2_pubnonce`)
     2: data:
         * [`66*byte`:`nonces`]
 
@@ -762,7 +799,7 @@ As with base channels, the `nSequence` field must be set to `to_self_delay`.
 
 As we inherit the anchor output semantics we want to ensure that the remote
 party can unilaterally sweep their funds after the 1 block CSV delay. In order
-to achieve this property, we'll re-use the `combined_funding_key` here: its in
+to achieve this property, we'll re-use the `_funding_key` here: its in
 the best interest of the other party to enforce these semantics (mempool
 pinning mitigation), so the remote party will be forced to always take the
 script reveeal path.
@@ -771,8 +808,7 @@ The to remote output has the following form:
 
   * `OP_1 to_remote_output_key`
   * where:
-    * `taproot_nums_point = 0245b18183a06ee58228f07d9716f0f121cd194e4d924b037522503a7160432f15`
-    * `to_remote_output_key = taproot_nums_point + tagged_hash("TapTweak", combined_funding_key || to_remote_script_root)`
+    * `to_remote_output_key = combined_funding_key + tagged_hash("TapTweak", combined_funding_key || to_remote_script_root)`
     * `to_remote_script_root = tapscript_root([to_remote_script])`
     * `to_remote_script` is the remote script:
         ```
@@ -787,7 +823,7 @@ This output can be swept by the remote party with the following witness:
 
 where `to_remote_control_block` is:
 ```
-(output_key_y_parity | 0xc0) || taproot_nums_point
+(output_key_y_parity | 0xc0) || combined_funding_key
 ```
 
 #### Anchor Outputs
