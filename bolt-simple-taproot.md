@@ -411,8 +411,7 @@ The sender:
   `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
 - MUST include the partial signature and the public counterpart of the generated nonce in
   the `partial_signature_with_nonce` field.
-- MUST generate a second unique nonce to send in the `next_local_nonce` field. This nonce MUST be used to sign the sender's
-  local commitment using the `Sign` algorithm from `bip-musig2`.
+- MUST generate a second unique nonce to send in the `next_local_nonce` field.
 
 The recipient:
 
@@ -519,8 +518,7 @@ The sender:
   `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
 - MUST include the partial signature and the public counterpart of the generated nonce in
   the `partial_signature_with_nonce` field.
-- MUST generate a second unique nonce to send in the `next_local_nonce` field. This nonce MUST be used to sign the sender's
-  local commitment using the `Sign` algorithm from `bip-musig2`.
+- MUST generate a second unique nonce to send in the `next_local_nonce` field.
 
 The recipient:
 
@@ -601,8 +599,7 @@ received.
 
 The sender:
 
-- MUST generate a unique nonce to send in the `next_local_nonce` field. This nonce MUST be used to sign the sender's
-  local commitment using the `Sign` algorithm from `bip-musig2`.
+- MUST generate a unique nonce to send in the `next_local_nonce` field.
 
 The recipient:
 
