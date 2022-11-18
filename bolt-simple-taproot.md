@@ -26,6 +26,7 @@ Created: 2022-04-20
   * [Design Overview](#design-overview)
   * [Specification](#specification)
     + [Feature Bits](#feature-bits)
+    + [New TLV Types](#new-tlv-types)
     + [Channel Funding](#channel-funding)
       - [`accept_channel` Extensions](#accept_channel-extensions)
       - [`funding_created` Extensions](#funding_created-extensions)
@@ -359,6 +360,21 @@ negotiation.
 
 Throughout this document, we assume that `option_taproot` was negotiated, and also the `option_taproot`
 channel type is used.
+
+### New TLV Types
+
+Note that these TLV types exist across different messages, but their type IDs are always the same.
+
+#### partial_signature_with_nonce
+- type: 2
+- data:
+   * [`32*byte`: `partial_signature`]
+   * [`66*byte`: `public_nonce`]
+
+#### next_local_nonce
+- type: 4
+- data:
+   * [`66*byte`: `public_nonce`]
 
 ### Channel Funding
 
