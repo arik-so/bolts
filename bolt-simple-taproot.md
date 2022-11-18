@@ -30,12 +30,14 @@ Created: 2022-04-20
       - [`accept_channel` Extensions](#accept_channel-extensions)
       - [`funding_created` Extensions](#funding_created-extensions)
       - [`funding_signed` Extensions](#funding_signed-extensions)
-      - [`channel_ready`/`channel_reestablish` Extensions](#channel_readychannel_reestablish-extensions)
+      - [`channel_ready` Extensions](#channel_ready-extensions)
     + [Cooperative Closure](#cooperative-closure)
       - [`closing_signed` Extensions](#closing_signed-extensions)
     + [Channel Operation](#channel-operation)
       - [`commitment_signed` Extensions](#commitment_signed-extensions)
       - [`revoke_and_ack` Extensions](#revoke_and_ack-extensions)
+    + [Message Retransmission](#message-retransmission)
+      - [`channel_reestablish` Extensions](#channel_reestablish-extensions)
     + [Funding Transactions](#funding-transactions)
     + [Commitment Transactions](#commitment-transactions)
       - [To Local Outputs](#to-local-outputs)
@@ -456,11 +458,11 @@ The recipient:
   algorithm of `bip-musig2`:
   - if the partial signature is invalid, MUST fail the channel
 
-#### `channel_ready`/`channel_reestablish` Extensions
+#### `channel_ready` Extensions
 
-We add a new TLV field to the `channel_ready` and `channel_reestablish` messages:
+We add a new TLV field to the `channel_ready` message:
 
-1. `tlv_stream`: `channel_ready_tlvs`/`channel_reestablish_tlvs`
+1. `tlv_stream`: `channel_ready_tlvs`
 2. types:
    1. type: 4 (`next_local_nonce`)
    2. data:
@@ -607,6 +609,40 @@ The recipient:
 - If the local nonce generation is non-deterministic and the recipient co-signs commitments only upon
   pending broadcast:
   - MUST **securely** store the local nonce.
+
+### Message Retransmission
+
+#### `channel_reestablish` Extensions
+
+We add a new TLV field to the `channel_reestablish` message:
+
+1. `tlv_stream`: `channel_reestablish_tlvs`
+2. types:
+1. type: 4 (`next_local_nonce`)
+2. data:
+   * [`66*byte`: `public_nonce`]
+
+Similar to the `next_per_commitment_point`, by sending the `next_local_nonce` value in this message,
+we ensure that the remote party has our public nonce which is required to generate a new
+commitment signature.
+
+##### Requirements
+
+The sender:
+
+- MUST set `next_local_nonce` to a fresh, unique `musig2` nonce as specified by `bip-musig2`
+
+The recipient:
+
+- MUST fail the channel if `next_local_nonce` is absent.
+
+A node:
+
+- If ALL of the following conditions apply:
+  - It has previously sent a `commitment_signed` message
+  - It never processed the corresponding `revoke_and_ack` message
+  - It decides to retransmit the exact `update_` messages from the last sent `commitment_signed`
+- THEN it must regenerate the partial signature using the newly received `next_local_nonce`
 
 ### Funding Transactions
 
