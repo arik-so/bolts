@@ -517,8 +517,7 @@ final, valid
 The sender:
 
 - MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
-- MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
-- MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
+- MUST retrieve the `musig2` public key previously aggregated from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
 - MUST generate a unique nonce to combine with the `next_local_nonce` previously received in the latest
   of `channel_ready`, `channel_reestablish`, `revoke_and_ack`, or `closing_signed` using `NonceAgg` from `bip-musig2`.
@@ -567,8 +566,7 @@ A new TLV stream is added to the `commitment_signed` message:
 The sender:
 
 - MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
-- MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
-- MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
+- MUST retrieve the `musig2` public key previously aggregated from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
 - MUST generate a unique nonce to combine with the `next_local_nonce` previously received in the latest
   of `channel_ready`, `channel_reestablish`, or `revoke_and_ack` using `NonceAgg` from `bip-musig2`.
