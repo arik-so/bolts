@@ -386,8 +386,6 @@ The sender:
 The recipient:
 
 - MUST reject the channel if `next_local_nonce` is absent.
-- MUST store `next_local_nonce` until they send the `funding_created` message.
-  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 #### `funding_created` Extensions
 
@@ -426,8 +424,6 @@ The recipient:
 - MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
   algorithm of `bip-musig2`:
   - if the partial signature is invalid, MUST fail the channel
-- MUST store `next_local_nonce` until they send the `funding_signed` message.
-  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 #### `funding_signed` Extensions
 
@@ -484,8 +480,6 @@ The sender:
 The recipient:
 
 - MUST fail the channel if `next_local_nonce` is absent.
-- MUST store `next_local_nonce` until they send the next `commitment_signed` message.
-  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 ### Cooperative Closure
 
@@ -540,8 +534,6 @@ The recipient:
 - MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
   algorithm of `bip-musig2`:
   - if the partial signature is invalid, MUST fail the channel
-- MUST store `next_local_nonce` until they, in turn, send _their_ `closing_signed` message.
-  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 ### Channel Operation
 
@@ -615,8 +607,6 @@ The sender:
 The recipient:
 
 - MUST fail the channel if `next_local_nonce` is absent.
-- MUST store `next_local_nonce` until they send the next `commitment_signed` message.
-  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 - If the local nonce generation is non-deterministic and the recipient co-signs commitments only upon
   pending broadcast:
   - MUST **securely** store the local nonce.
