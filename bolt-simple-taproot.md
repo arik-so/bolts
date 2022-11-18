@@ -404,6 +404,7 @@ The recipient:
 
 The sender:
 
+- MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
 - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
 - MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
@@ -438,6 +439,7 @@ The recipient:
 
 The sender:
 
+- MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
 - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
 - MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
