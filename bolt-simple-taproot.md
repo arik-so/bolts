@@ -372,7 +372,7 @@ We add `option_taproot` to the set of defined channel types.
 
 1. `tlv_stream`: `accept_channel_tlvs`
 2. types:
-   1. type: 4 (`musig2_nonce`)
+   1. type: 4 (`next_local_nonce`)
    2. data:
       * [`66*byte`:`public_nonce`]
 
@@ -380,14 +380,14 @@ We add `option_taproot` to the set of defined channel types.
 
 The sender:
 
-- MUST set `musig2_nonce` to the `musig2` public nonce used to sign local commitments as specified by the `NonceGen`
+- MUST set `next_local_nonce` to the `musig2` public nonce used to sign local commitments as specified by the `NonceGen`
   algorithm of `bip-musig2`.
 
 The recipient:
 
-- MUST reject the channel if `musig2_nonce` is absent.
-- MUST store `musig2_nonce` until they send the `funding_created` message.
-  - SHOULD only store `musig2_nonce` in RAM, and not persist it to disk.
+- MUST reject the channel if `next_local_nonce` is absent.
+- MUST store `next_local_nonce` until they send the `funding_created` message.
+  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 #### `funding_created` Extensions
 
@@ -396,7 +396,7 @@ The recipient:
    1. type: 2 (`partial_signature_with_nonce`)
    2. data:
       * [`98*byte`: `partial_signature || public_nonce`]
-   3. type: 4 (`musig2_nonce`)
+   3. type: 4 (`next_local_nonce`)
    4. data:
       * [`66*byte`: `public_nonce`]
 
@@ -407,27 +407,27 @@ The sender:
 - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
 - MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `musig2_nonce` previously received in
+- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in
   `accept_channel` using `NonceAgg` from `bip-musig2`.
 - MUST use the generated secret nonce and the calculated aggregate nonce to construct a
   `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
 - MUST include the partial signature and the public counterpart of the generated nonce in
   the `partial_signature_with_nonce` field.
-- MUST generate a second unique nonce to send in the `musig2_nonce` field. This nonce MUST be used to sign the sender's
+- MUST generate a second unique nonce to send in the `next_local_nonce` field. This nonce MUST be used to sign the sender's
   local commitment using the `Sign` algorithm from `bip-musig2`.
 
 The recipient:
 
 - MUST fail the channel if `partial_signature_with_nonce` is absent.
-- MUST fail the channel if `musig2_nonce` is absent.
+- MUST fail the channel if `next_local_nonce` is absent.
 - MUST compute the aggregate nonce from:
-  - the `musig2_nonce` field the recipient previously sent in `accept_channel`
+  - the `next_local_nonce` field the recipient previously sent in `accept_channel`
   - the `public_nonce` included as part of the `partial_signature_with_nonce` field
 - MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
   algorithm of `bip-musig2`:
   - if the partial signature is invalid, MUST fail the channel
-- MUST store `musig2_nonce` until they send the `funding_signed` message.
-  - SHOULD only store `musig2_nonce` in RAM, and not persist it to disk.
+- MUST store `next_local_nonce` until they send the `funding_signed` message.
+  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 #### `funding_signed` Extensions
 
@@ -444,7 +444,7 @@ The sender:
 - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
 - MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `musig2_nonce` previously received in
+- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in
   `funding_created` using `NonceAgg` from `bip-musig2`.
 - MUST use the generated secret nonce and the calculated aggregate nonce to construct a
   `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
@@ -455,7 +455,7 @@ The recipient:
 
 - MUST fail the channel if `partial_signature_with_nonce` is absent.
 - MUST compute the aggregate nonce from:
-  - the `musig2_nonce` field the recipient previously sent in `funding_created`
+  - the `next_local_nonce` field the recipient previously sent in `funding_created`
   - the `public_nonce` included as part of the `partial_signature_with_nonce` field
 - MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
   algorithm of `bip-musig2`:
@@ -467,11 +467,11 @@ We add a new TLV field to the `channel_ready` and `channel_reestablish` messages
 
 1. `tlv_stream`: `channel_ready_tlvs`/`channel_reestablish_tlvs`
 2. types:
-   1. type: 4 (`musig2_nonce`)
+   1. type: 4 (`next_local_nonce`)
    2. data:
       * [`66*byte`: `public_nonce`]
 
-Similar to the `next_per_commitment_point`, by sending the `musig2_nonce` value in this message,
+Similar to the `next_per_commitment_point`, by sending the `next_local_nonce` value in this message,
 we ensure that the remote party has our public nonce which is required to generate a new
 commitment signature.
 
@@ -479,13 +479,13 @@ commitment signature.
 
 The sender:
 
-- MUST set `musig2_nonce` to a fresh, unique `musig2` nonce as specified by `bip-musig2`
+- MUST set `next_local_nonce` to a fresh, unique `musig2` nonce as specified by `bip-musig2`
 
 The recipient:
 
-- MUST fail the channel if `musig2_nonce` is absent.
-- MUST store `musig2_nonce` until they send the next `commitment_signed` message.
-  - SHOULD only store `musig2_nonce` in RAM, and not persist it to disk.
+- MUST fail the channel if `next_local_nonce` is absent.
+- MUST store `next_local_nonce` until they send the next `commitment_signed` message.
+  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 ### Cooperative Closure
 
@@ -499,13 +499,13 @@ message's existing `tlv_stream`:
    1. type: 2 (`partial_signature_with_nonce`)
    2. data:
       * [`98*byte`: `partial_signature || public_nonce`]
-   3. type: 4 (`musig2_nonce`)
+   3. type: 4 (`next_local_nonce`)
    4. data:
       * [`66*byte`: `public_nonce`]
 
 Both sides **MUST** provide this new TLV field.
 
-As a fresh `musig2_nonce` is required to sign another fee proposal, with each new signature, both sides send a new
+As a fresh `next_local_nonce` is required to sign another fee proposal, with each new signature, both sides send a new
 nonce that'll be used for the _next_ signature.
 
 Once all partial signatures are known, the `PartialSigAgg` algorithm is used to aggregate the partial signature into a
@@ -520,29 +520,29 @@ The sender:
 - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
 - MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `musig2_nonce` previously received in the latest
+- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in the latest
   of `channel_ready`, `channel_reestablish`, `revoke_and_ack`, or `closing_signed` using `NonceAgg` from `bip-musig2`.
 - MUST use the generated secret nonce and the calculated aggregate nonce to construct a
   `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
 - MUST include the partial signature and the public counterpart of the generated nonce in
   the `partial_signature_with_nonce` field.
-- MUST generate a second unique nonce to send in the `musig2_nonce` field. This nonce MUST be used to sign the sender's
+- MUST generate a second unique nonce to send in the `next_local_nonce` field. This nonce MUST be used to sign the sender's
   local commitment using the `Sign` algorithm from `bip-musig2`.
 
 The recipient:
 
 - MUST fail the channel if `signature` is non-zero.
 - MUST fail the channel if `partial_signature_with_nonce` is absent.
-- MUST fail the channel if `musig2_nonce` is absent.
+- MUST fail the channel if `next_local_nonce` is absent.
 - MUST compute the aggregate nonce from:
-  - the `musig2_nonce` field the recipient previously sent in the latest of `channel_ready`,
+  - the `next_local_nonce` field the recipient previously sent in the latest of `channel_ready`,
     `channel_reestablish`, `revoke_and_ack`, or `closing_signed`
   - the `public_nonce` included as part of the `partial_signature_with_nonce` field
 - MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
   algorithm of `bip-musig2`:
   - if the partial signature is invalid, MUST fail the channel
-- MUST store `musig2_nonce` until they, in turn, send _their_ `closing_signed` message.
-  - SHOULD only store `musig2_nonce` in RAM, and not persist it to disk.
+- MUST store `next_local_nonce` until they, in turn, send _their_ `closing_signed` message.
+  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 
 ### Channel Operation
 
@@ -570,7 +570,7 @@ The sender:
 - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
 - MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
   from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `musig2_nonce` previously received in the latest
+- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in the latest
   of `channel_ready`, `channel_reestablish`, or `revoke_and_ack` using `NonceAgg` from `bip-musig2`.
 - MUST use the generated secret nonce and the calculated aggregate nonce to construct a
   `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
@@ -585,7 +585,7 @@ The recipient:
 - MUST fail the channel if `signature` is non-zero.
 - MUST fail the channel if `partial_signature_with_nonce` is absent.
 - MUST compute the aggregate nonce from:
-  - the `musig2_nonce` field the recipient previously sent in the latest of `channel_ready`,
+  - the `next_local_nonce` field the recipient previously sent in the latest of `channel_ready`,
     `channel_reestablish`, or `revoke_and_ack`
   - the `public_nonce` included as part of the `partial_signature_with_nonce` field
 - MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
@@ -599,7 +599,7 @@ A new TLV stream is added to the `revoke_and_ack` message:
 
 1. `tlv_stream`: `revoke_and_ack_tlvs`
 2. types:
-   1. type: 4 (`musig2_nonce`)
+   1. type: 4 (`next_local_nonce`)
    2. data:
       * [`66*byte`: `public_nonce`]
 
@@ -611,14 +611,14 @@ received.
 
 The sender:
 
-- MUST generate a unique nonce to send in the `musig2_nonce` field. This nonce MUST be used to sign the sender's
+- MUST generate a unique nonce to send in the `next_local_nonce` field. This nonce MUST be used to sign the sender's
   local commitment using the `Sign` algorithm from `bip-musig2`.
 
 The recipient:
 
-- MUST fail the channel if `musig2_nonce` is absent.
-- MUST store `musig2_nonce` until they send the next `commitment_signed` message.
-  - SHOULD only store `musig2_nonce` in RAM, and not persist it to disk.
+- MUST fail the channel if `next_local_nonce` is absent.
+- MUST store `next_local_nonce` until they send the next `commitment_signed` message.
+  - SHOULD only store `next_local_nonce` in RAM, and not persist it to disk.
 - If the local nonce generation is non-deterministic and the recipient co-signs commitments only upon
   pending broadcast:
   - MUST **securely** store the local nonce.
