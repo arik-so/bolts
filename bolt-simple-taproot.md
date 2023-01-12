@@ -28,11 +28,13 @@ Created: 2022-04-20
     + [Feature Bits](#feature-bits)
     + [New TLV Types](#new-tlv-types)
     + [Channel Funding](#channel-funding)
+      - [`open_channel` Extensions](#open_channel-extensions)
       - [`accept_channel` Extensions](#accept_channel-extensions)
       - [`funding_created` Extensions](#funding_created-extensions)
       - [`funding_signed` Extensions](#funding_signed-extensions)
       - [`channel_ready` Extensions](#channel_ready-extensions)
     + [Cooperative Closure](#cooperative-closure)
+      - [`shutdown` Extensions](#shutdown-extensions)
       - [`closing_signed` Extensions](#closing_signed-extensions)
     + [Channel Operation](#channel-operation)
       - [`commitment_signed` Extensions](#commitment_signed-extensions)
@@ -273,35 +275,44 @@ argument in order to strengthen their nonce.
 
 #### Nonce Handling
 
-Due to the asymmetric state of the current revocation channels, two sets of public nonces need to be exchanged by each
+For commitment transactions, Due to the asymmetric state of the current
+revocation channels, two sets of public nonces need to be exchanged by each
 party: one for the local commitment, and one for the remote commitment.
 
-The nonce for the local commitment MUST be sent a priori, thus enabling the counterparty to create a valid partial
-signature.
+The nonce for the local commitment MUST be sent a priori, thus enabling the
+counterparty to create a valid partial signature.
 
-The nonce for the remote commitment _could_ be sent a priori, too, but for the purposes of simplicity and
-disambiguation, MUST be sent alongside the partial signature. To that end, we will create a new data type that will be
-reused in multiple TLV extensions described further down in this document.
+The nonce for the remote commitment _could_ be sent a priori, too, but for the
+purposes of simplicity and disambiguation, MUST be sent alongside the partial
+signature. To that end, we will create a new data type that will be reused in
+multiple TLV extensions described further down in this document.
+
+The exception to this is the co-op close flow: as there's only a single message
+to sign, we only require a single pair of nonces. These nonces can also be sent
+right as the co-op flow begins.
 
 #### Signing
 
-Once public nonces have been exchanged, the `NonceAgg` algorithm is used to combine the public nonces into the aggregate
-nonce which will be a part of the final signature.
+Once public nonces have been exchanged, the `NonceAgg` algorithm is used to
+combine the public nonces into the aggregate nonce which will be a part of the
+final signature.
 
 The `Sign` method is used to generate a valid partial signature, with the
 `PartialSigVerify` algorithm used to verify each signature.
 
-Once all partial signatures are known, the `PartialSigAgg` algorithm is used to aggregate the partial signature into a
-final, valid
-[BIP 340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) Schnorr signature.
+Once all partial signatures are known, the `PartialSigAgg` algorithm is used to
+aggregate the partial signature into a final, valid [BIP
+340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) Schnorr
+signature.
 
 ##### Partial Signature Encoding
 
-A standard `musig2` partial signature is simply the encoding of the `s` value, which is a 32-byte-element modulo the
-order of the group.
+A standard `musig2` partial signature is simply the encoding of the `s` value,
+which is a 32-byte-element modulo the order of the group.
 
-Throughout this specification, we will be using a custom type, `PartialSignatureWithNonce`, comprised of the
-aforementioned `s` value, along with the 66-byte-encoding of the public nonce used to sign remote commitments:
+Throughout this specification, we will be using a custom type,
+`PartialSignatureWithNonce`, comprised of the aforementioned `s` value, along
+with the 66-byte-encoding of the public nonce used to sign remote commitments:
 
 ```
 s || point_1 || point_2
@@ -312,11 +323,12 @@ s || point_1 || point_2
 With the preliminaries out of the way, we provide a brief overview of the
 Simple Taproot Channel design.
 
-The multisig output becomes a single P2TR key, with `musig2` key aggregation used to combine two keys into one.
+The multisig output becomes a single P2TR key, with `musig2` key aggregation
+used to combine two keys into one.
 
-For commitment transactions, we inherit the anchor output semantics, meaning there are two outputs used for CPFP, with
-all other scripts inheriting a `1 CSV`
-restriction.
+For commitment transactions, we inherit the anchor output semantics, meaning
+there are two outputs used for CPFP, with all other scripts inheriting a `1
+CSV` restriction.
 
 The local output of the commitment transaction uses the revocation key as the
 taproot internal key, and commits to a single script path of the delay script.
@@ -324,13 +336,15 @@ taproot internal key, and commits to a single script path of the delay script.
 The remote output of the commitment transaction uses the `combined_funding_key`
 as the top-level internal key, and then commits to a normal remote script.
 
-Anchor outputs use the respective two parties' funding keys as the top-level internal key committing to the
-script `16 CSV`. If a local or remote output is missing from the commitment, its corresponding anchor must not be
-present, either.
+Anchor outputs use the respective two parties' funding keys as the top-level
+internal key committing to the script `16 CSV`. If a local or remote output is
+missing from the commitment, its corresponding anchor must not be present,
+either.
 
-All HTLC scripts use the revocation key as the top-level internal key. This allows the revocation to be executed without
-additional on-chain bytes, and also reduces the amount of state that nodes need to keep in order to properly handle
-channel breaches.
+All HTLC scripts use the revocation key as the top-level internal key. This
+allows the revocation to be executed without additional on-chain bytes, and
+also reduces the amount of state that nodes need to keep in order to properly
+handle channel breaches.
 
 ## Specification
 
@@ -376,6 +390,16 @@ Note that these TLV types exist across different messages, but their type IDs ar
 - data:
    * [`66*byte`: `public_nonce`]
 
+#### partial_signature
+- type: 6
+- data:
+   * [`32*byte`: `partial_signature`]
+
+#### shutdown_nonce
+- type: 8
+- data:
+   * [`66*byte`: `public_nonce`]
+
 ### Channel Funding
 
 `n_a_L`: Alice's local secret nonce
@@ -384,7 +408,46 @@ Note that these TLV types exist across different messages, but their type IDs ar
 
 ![](taproot_channel_open.jpg)
 
+The `open_channel` and `accept_channel` messages are extended to specify a new
+TLV type that houses the `musig2` public nonces.
+
 We add `option_taproot` to the set of defined channel types.
+
+#### `open_channel` Extensions
+
+1. `tlv_stream`: `open_channel_tlvs`
+2. types:
+   1. type: 4 (`next_local_nonce`)
+   2. data:
+      * [`66*byte`:`public_nonce`]
+
+##### Requirements
+
+The sending node:
+
+  - MUST specify the `next_local_nonce` field.
+  - MUST use the `NonceGen` algorithm defined in `bip-musig2` to generate
+    `next_local_nonce` to ensure it generates nonces in a safe manner.
+
+The receiving node MUST fail the channel if:
+
+  - the message doesn't include a `next_local_nonce` value.
+
+  - the specified public nonce cannot be parsed as two compressed secp256k1
+    points
+
+##### Rationale
+
+For the initial Taproot channel type (`option_taproot`), musig2 nonces
+must be exchanged in the first round trip (open->, <-accept) to ensure that the
+initiator is able to generate a valid musig2 partial signature at the next
+step once the transaction to be signed is fully specified.
+
+The `next_local_nonce` field will be used to verify incoming commitment
+signatures. Each incoming signature will carry the newly generated nonce used
+to sign the commitment transaction. At force close broadcast time, the
+verification nonce is then used to sign the local party's commitment
+transaction.
 
 #### `accept_channel` Extensions
 
@@ -398,12 +461,15 @@ We add `option_taproot` to the set of defined channel types.
 
 The sender:
 
-- MUST set `next_local_nonce` to the `musig2` public nonce used to sign local commitments as specified by the `NonceGen`
-  algorithm of `bip-musig2`.
+  - MUST set `next_local_nonce` to the `musig2` public nonce used to sign local
+    commitments as specified by the `NonceGen` algorithm of `bip-musig2`.
 
 The recipient:
 
-- MUST reject the channel if `next_local_nonce` is absent.
+  - MUST reject the channel if `next_local_nonce` is absent.
+
+  - the specified public nonce cannot be parsed as two compressed secp256k1
+    points
 
 #### `funding_created` Extensions
 
@@ -412,36 +478,49 @@ The recipient:
    1. type: 2 (`partial_signature_with_nonce`)
    2. data:
       * [`98*byte`: `partial_signature || public_nonce`]
-   3. type: 4 (`next_local_nonce`)
-   4. data:
-      * [`66*byte`: `public_nonce`]
 
 ##### Requirements
 
 The sender:
 
-- MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
-- MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
-- MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
-  from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in
-  `accept_channel` using `NonceAgg` from `bip-musig2`.
-- MUST use the generated secret nonce and the calculated aggregate nonce to construct a
-  `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
-- MUST include the partial signature and the public counterpart of the generated nonce in
-  the `partial_signature_with_nonce` field.
-- MUST generate a second unique nonce to send in the `next_local_nonce` field.
+  - MUST set the original, non-TLV `signature` field to a 0-byte-array of length
+    64.
+  
+  - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from
+    `bip-musig2`.
+  
+  - MUST compute the aggregated `musig2` public key from the sorted
+    `funding_pubkey`s using the `KeyAgg` algorithm from `bip-musig2`.
+  
+  - MUST generate a unique nonce to combine with the `next_local_nonce`
+    previously received in `accept_channel` using `NonceAgg` from `bip-musig2`.
+  
+  - MUST use the generated secret nonce and the calculated aggregate nonce to
+    construct a `musig2` partial signature for the sender's remote commitment
+    using the `Sign` algorithm from `bip-musig2`.
+  
+  - MUST include the partial signature and the public counterpart of the
+    generated nonce in
+    the `partial_signature_with_nonce` field.
 
 The recipient:
 
-- MUST fail the channel if `partial_signature_with_nonce` is absent.
-- MUST fail the channel if `next_local_nonce` is absent.
-- MUST compute the aggregate nonce from:
-  - the `next_local_nonce` field the recipient previously sent in `accept_channel`
-  - the `public_nonce` included as part of the `partial_signature_with_nonce` field
-- MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
-  algorithm of `bip-musig2`:
-  - if the partial signature is invalid, MUST fail the channel
+  - MUST fail the channel if `partial_signature_with_nonce` is absent.
+
+  - MUST fail the channel if `next_local_nonce` is absent.
+
+  - MUST compute the aggregate nonce from:
+
+    - the `next_local_nonce` field the recipient previously sent in
+      `accept_channel`
+
+    - the `public_nonce` included as part of the `partial_signature_with_nonce`
+      field
+
+  - MUST verify the `partial_signature_with_nonce` field using the
+    `PartialSigVerifyInternal` algorithm of `bip-musig2`:
+
+    - if the partial signature is invalid, MUST fail the channel
 
 #### `funding_signed` Extensions
 
@@ -455,26 +534,41 @@ The recipient:
 
 The sender:
 
-- MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
-- MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from `bip-musig2`.
-- MUST compute the aggregated `musig2` public key from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
-  from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in
-  `funding_created` using `NonceAgg` from `bip-musig2`.
-- MUST use the generated secret nonce and the calculated aggregate nonce to construct a
-  `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
-- MUST include the partial signature and the public counterpart of the generated nonce in
-  the `partial_signature_with_nonce` field.
+  - MUST set the original, non-TLV `signature` field to a 0-byte-array of length
+    64.
+  
+  - MUST sort the exchanged `funding_pubkey`s using the `KeySort` algorithm from
+    `bip-musig2`.
+  
+  - MUST compute the aggregated `musig2` public key from the sorted
+    `funding_pubkey`s using the `KeyAgg` algorithm from `bip-musig2`.
+  
+  - MUST generate a unique nonce to combine with the `next_local_nonce`
+    previously received in `funding_created` using `NonceAgg` from `bip-musig2`.
+  
+  - MUST use the generated secret nonce and the calculated aggregate nonce to
+    construct a `musig2` partial signature for the sender's remote commitment
+    using the `Sign` algorithm from `bip-musig2`.
+  
+  - MUST include the partial signature and the public counterpart of the
+    generated nonce in the `partial_signature_with_nonce` field.
 
 The recipient:
 
-- MUST fail the channel if `partial_signature_with_nonce` is absent.
-- MUST compute the aggregate nonce from:
-  - the `next_local_nonce` field the recipient previously sent in `funding_created`
-  - the `public_nonce` included as part of the `partial_signature_with_nonce` field
-- MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
-  algorithm of `bip-musig2`:
-  - if the partial signature is invalid, MUST fail the channel
+  - MUST fail the channel if `partial_signature_with_nonce` is absent.
+  
+  - MUST compute the aggregate nonce from:
+  
+    - the `next_local_nonce` field the recipient previously sent in
+      `funding_created`
+  
+    - the `public_nonce` included as part of the `partial_signature_with_nonce`
+      field
+  
+  - MUST verify the `partial_signature_with_nonce` field using the
+    `PartialSigVerifyInternal` algorithm of `bip-musig2`:
+  
+    - if the partial signature is invalid, MUST fail the channel
 
 #### `channel_ready` Extensions
 
@@ -486,21 +580,56 @@ We add a new TLV field to the `channel_ready` message:
    2. data:
       * [`66*byte`: `public_nonce`]
 
-Similar to the `next_per_commitment_point`, by sending the `next_local_nonce` value in this message,
-we ensure that the remote party has our public nonce which is required to generate a new
-commitment signature.
+Similar to the `next_per_commitment_point`, by sending the `next_local_nonce`
+value in this message, we ensure that the remote party has our public nonce
+which is required to generate a new commitment signature.
 
 ##### Requirements
 
 The sender:
 
-- MUST set `next_local_nonce` to a fresh, unique `musig2` nonce as specified by `bip-musig2`
+- MUST set `next_local_nonce` to a fresh, unique `musig2` nonce as specified by
+  `bip-musig2`
 
 The recipient:
 
 - MUST fail the channel if `next_local_nonce` is absent.
 
 ### Cooperative Closure
+
+#### `shutdown` Extensions
+
+A new TLV field is added to the `shutdown` message:
+
+1. type: 38 (`shutdown`)
+2. data:
+    * ...
+    * [`shutdown_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `shutdown_tlvs`
+2. types:
+    1. type: 8 (`shutdown_nonce`)
+    2: data:
+        * [`66*byte`:`nonces`]
+
+Before a signature can be generated for a co-op close transaction, but sides
+must exchange a fresh pair of `musig2_pubnonce` values. We package this with
+the `shutdown` message so that both sides can send a `closing_signed` message
+as soon as a `shutdown` message is sent and received.
+
+Only a single nonce is needed as there's only a single message to sign: the
+shared co-op close transaction.
+
+##### Requirements
+
+A sending node:
+
+ - MUST set the `shutdown_nonce` to a valid `musig2` public nonce.
+
+A receiving node:
+
+ - MUST verify that the `shutdown_nonce` value is a valid `musig2` public
+   nonce.
 
 #### `closing_signed` Extensions
 
@@ -509,49 +638,90 @@ message's existing `tlv_stream`:
 
 1. `tlv_stream`: `closing_signed_tlvs`
 2. types:
-   1. type: 2 (`partial_signature_with_nonce`)
+   1. type: 6 (`partial_signature`)
    2. data:
-      * [`98*byte`: `partial_signature || public_nonce`]
-   3. type: 4 (`next_local_nonce`)
-   4. data:
-      * [`66*byte`: `public_nonce`]
+      * [`32*byte`: `partial_signature`
 
 Both sides **MUST** provide this new TLV field.
 
-As a fresh `next_local_nonce` is required to sign another fee proposal, with each new signature, both sides send a new
-nonce that'll be used for the _next_ signature.
-
-Once all partial signatures are known, the `PartialSigAgg` algorithm is used to aggregate the partial signature into a
-final, valid
-[BIP 340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) Schnorr signature.
+Once all partial signatures are known, the `PartialSigAgg` algorithm is used to
+aggregate the partial signature into a final, valid [BIP
+340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki) Schnorr
+signature.
 
 #### Requirements
 
 The sender:
 
-- MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
-- MUST retrieve the `musig2` public key previously aggregated from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
-  from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in the latest
-  of `channel_ready`, `channel_reestablish`, `revoke_and_ack`, or `closing_signed` using `NonceAgg` from `bip-musig2`.
-- MUST use the generated secret nonce and the calculated aggregate nonce to construct a
-  `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
-- MUST include the partial signature and the public counterpart of the generated nonce in
-  the `partial_signature_with_nonce` field.
-- MUST generate a second unique nonce to send in the `next_local_nonce` field.
+  - MUST set the original, non-TLV `signature` field to a 0-byte-array of length
+    64.
+  
+  - MUST retrieve the `musig2` public key previously aggregated from the sorted
+    `funding_pubkey`s using the `KeyAgg` algorithm from `bip-musig2`.
+  
+  - MUST generate a unique nonce to combine with the `next_local_nonce`
+    previously received in the latest of `channel_ready`, `channel_reestablish`,
+    `revoke_and_ack`, or `closing_signed` using `NonceAgg` from `bip-musig2`.
+  
+  - MUST use the generated secret nonce and the calculated aggregate nonce to
+    construct a `musig2` partial signature for the sender's remote commitment
+    using the `Sign` algorithm from `bip-musig2`.
+  
+  - MUST include the partial signature and the public counterpart of the
+    generated nonce in the `partial_signature_with_nonce` field.
+  
+  - MUST generate a second unique nonce to send in the `next_local_nonce` field.
+
+  - If they are the responder:
+
+    - MUST returned a `closing_signed` message accepting the initiator's fee
+      rate.
 
 The recipient:
 
-- MUST fail the channel if `signature` is non-zero.
-- MUST fail the channel if `partial_signature_with_nonce` is absent.
-- MUST fail the channel if `next_local_nonce` is absent.
-- MUST compute the aggregate nonce from:
-  - the `next_local_nonce` field the recipient previously sent in the latest of `channel_ready`,
-    `channel_reestablish`, `revoke_and_ack`, or `closing_signed`
-  - the `public_nonce` included as part of the `partial_signature_with_nonce` field
-- MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
-  algorithm of `bip-musig2`:
-  - if the partial signature is invalid, MUST fail the channel
+  - MUST fail the channel if `signature` is non-zero.
+  
+  - MUST fail the channel if `partial_signature_with_nonce` is absent.
+  
+  - MUST fail the channel if `next_local_nonce` is absent.
+  
+  - MUST compute the aggregate nonce from:
+  
+    - the `next_local_nonce` field the recipient previously sent in the latest
+      of `channel_ready`, `channel_reestablish`, `revoke_and_ack`, or
+      `closing_signed`
+  
+    - the `public_nonce` included as part of the `partial_signature_with_nonce`
+      field
+  
+  - MUST verify the `partial_signature_with_nonce` field using the
+    `PartialSigVerifyInternal` algorithm of `bip-musig2`:
+  
+    - if the partial signature is invalid, MUST fail the channel
+
+  - If they are the initiator: 
+
+    - MUST combine the received signature using the `msugi2.PartialSigAgg`
+      algorithm to yield a final schnorr signature that can be placed into the
+      co-op close txn for broadcast
+
+#### Rationale
+
+Compared to the regular co-op close flow, for taproot channels, there is no
+sort of fee rate negotiation. The regular segwit v0 channels permit either side
+to accept a prior offer by a peer that it would have accepted in the current
+round. For musig2, as each signature comes with nonce state, the prior offer
+may actually be using distinct nonce state, rendering it unable to be comined
+for the final transaction braodcast.
+
+Instead, the responder will simply accept what the initiator proposes. The
+responder can always CPFP after the fact if they require a higher fee rate. The
+initiator is the one that pays fees directly (coming out of their settled
+output), so the responder will always have their full funds develiered to them.
+This change ensures that cooperative close always succeeds after a single
+round.
+
+
 
 ### Channel Operation
 
@@ -575,31 +745,52 @@ A new TLV stream is added to the `commitment_signed` message:
 
 The sender:
 
-- MUST set the original, non-TLV `signature` field to a 0-byte-array of length 64.
-- MUST retrieve the `musig2` public key previously aggregated from the sorted `funding_pubkey`s using the `KeyAgg` algorithm
-  from `bip-musig2`.
-- MUST generate a unique nonce to combine with the `next_local_nonce` previously received in the latest
-  of `channel_ready`, `channel_reestablish`, or `revoke_and_ack` using `NonceAgg` from `bip-musig2`.
-- MUST use the generated secret nonce and the calculated aggregate nonce to construct a
-  `musig2` partial signature for the sender's remote commitment using the `Sign` algorithm from `bip-musig2`.
-- MUST include the partial signature and the public counterpart of the generated nonce in
-  the `partial_signature_with_nonce` field.
-- MUST compute each HTLC signature according to
-  [BIP 342](https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki), as a BIP 340 Schnorr
-  signature (non-partial).
+  - MUST set the original, non-TLV `signature` field to a 0-byte-array of length
+    64.
+  
+  - MUST retrieve the `musig2` public key previously aggregated from the sorted
+    `funding_pubkey`s using the `KeyAgg` algorithm from `bip-musig2`.
+  
+  - MUST generate a unique nonce to combine with the `next_local_nonce`
+    previously received in the latest of `channel_ready`, `channel_reestablish`,
+    or `revoke_and_ack` using `NonceAgg` from `bip-musig2`.
+  
+  - MUST use the generated secret nonce and the calculated aggregate nonce to
+    construct a `musig2` partial signature for the sender's remote commitment
+    using the `Sign` algorithm from `bip-musig2`.
+  
+  - MUST include the partial signature and the public counterpart of the
+    generated nonce in the `partial_signature_with_nonce` field.
+  
+  - MUST compute each HTLC signature according to
+    [BIP 342](https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki), as
+    a BIP 340 Schnorr signature (non-partial).
+
+    - Each htlc signature must be packed as a 64-byte byte value within teh
+      existing `commit_sig` field.
+
 
 The recipient:
 
-- MUST fail the channel if `signature` is non-zero.
-- MUST fail the channel if `partial_signature_with_nonce` is absent.
-- MUST compute the aggregate nonce from:
-  - the `next_local_nonce` field the recipient previously sent in the latest of `channel_ready`,
-    `channel_reestablish`, or `revoke_and_ack`
-  - the `public_nonce` included as part of the `partial_signature_with_nonce` field
-- MUST verify the `partial_signature_with_nonce` field using the `PartialSigVerifyInternal`
-  algorithm of `bip-musig2`:
-  - if the partial signature is invalid, MUST fail the channel
-- MUST fail the channel if _any_ of the received HTLC signatures is invalid according to BIP 342.
+  - MUST fail the channel if `signature` is non-zero.
+
+  - MUST fail the channel if `partial_signature_with_nonce` is absent.
+
+  - MUST compute the aggregate nonce from:
+
+    - the `next_local_nonce` field the recipient previously sent in the latest
+      of `channel_ready`, `channel_reestablish`, or `revoke_and_ack`
+
+    - the `public_nonce` included as part of the `partial_signature_with_nonce`
+      field
+
+  - MUST verify the `partial_signature_with_nonce` field using the
+    `PartialSigVerifyInternal` algorithm of `bip-musig2`:
+
+    - if the partial signature is invalid, MUST fail the channel
+
+  - MUST fail the channel if _any_ of the received HTLC signatures is invalid
+    according to BIP 342.
 
 #### `revoke_and_ack` Extensions
 
@@ -611,9 +802,9 @@ A new TLV stream is added to the `revoke_and_ack` message:
    2. data:
       * [`66*byte`: `public_nonce`]
 
-Similar to sending the `next_per_commitment_point`, we also send the _next_ `musig2` nonce after we revoke a
-state. Sending this nonce allows the remote party to propose another state transition as soon as the message is
-received.
+Similar to sending the `next_per_commitment_point`, we also send the _next_
+`musig2` nonce after we revoke a state. Sending this nonce allows the remote
+party to propose another state transition as soon as the message is received.
 
 ##### Requirements
 
@@ -624,8 +815,10 @@ The sender:
 The recipient:
 
 - MUST fail the channel if `next_local_nonce` is absent.
-- If the local nonce generation is non-deterministic and the recipient co-signs commitments only upon
-  pending broadcast:
+
+- If the local nonce generation is non-deterministic and the recipient co-signs
+  commitments only upon pending broadcast:
+
   - MUST **securely** store the local nonce.
 
 ### Message Retransmission
@@ -640,15 +833,16 @@ We add a new TLV field to the `channel_reestablish` message:
 2. data:
    * [`66*byte`: `public_nonce`]
 
-Similar to the `next_per_commitment_point`, by sending the `next_local_nonce` value in this message,
-we ensure that the remote party has our public nonce which is required to generate a new
-commitment signature.
+Similar to the `next_per_commitment_point`, by sending the `next_local_nonce`
+value in this message, we ensure that the remote party has our public nonce
+which is required to generate a new commitment signature.
 
 ##### Requirements
 
 The sender:
 
-- MUST set `next_local_nonce` to a fresh, unique `musig2` nonce as specified by `bip-musig2`
+- MUST set `next_local_nonce` to a fresh, unique `musig2` nonce as specified by
+  `bip-musig2`
 
 The recipient:
 
@@ -656,11 +850,17 @@ The recipient:
 
 A node:
 
-- If ALL of the following conditions apply:
-  - It has previously sent a `commitment_signed` message
-  - It never processed the corresponding `revoke_and_ack` message
-  - It decides to retransmit the exact `update_` messages from the last sent `commitment_signed`
-- THEN it must regenerate the partial signature using the newly received `next_local_nonce`
+  - If ALL of the following conditions apply:
+  
+    - It has previously sent a `commitment_signed` message
+  
+    - It never processed the corresponding `revoke_and_ack` message
+  
+    - It decides to retransmit the exact `update_` messages from the last sent
+      `commitment_signed`
+  
+  - THEN it must regenerate the partial signature using the newly received
+    `next_local_nonce`
 
 ### Funding Transactions
 
@@ -929,8 +1129,13 @@ A HTLC-Timeout transaction has the following structure:
 # Acknowledgements
 
 The commitment and HTLC scripts are heavily based off of t-bast's [Lightning Is
-Getting Taprooty Scriptless-Scripty](https://github.com/t-bast/lightning-docs/blob/master/taproot-updates.md#lightning-is-getting-taprooty-scriptless-scripty) document.
+Getting Taprooty
+Scriptless-Scripty](https://github.com/t-bast/lightning-docs/blob/master/taproot-updates.md#lightning-is-getting-taprooty-scriptless-scripty)
+document.
 
-AJ Towns proposed a more ambitious ["one shot" upgrade which includes PTLCs](https://lists.linuxfoundation.org/pipermail/lightning-dev/2021-October/003278.html)
+AJ Towns proposed a more ambitious ["one shot" upgrade which includes
+PTLCs](https://lists.linuxfoundation.org/pipermail/lightning-dev/2021-October/003278.html)
 and a modified revocation scheme which this proposal takes inspiration from.
 
+Arik and Wilmer Paulino for suggesting the "JIT nonce" approach used in this
+specification when sending musig2 partial signatures.
