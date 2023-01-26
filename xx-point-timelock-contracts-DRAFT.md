@@ -82,11 +82,11 @@ I propose we split up the PTLC initialization into three messages: `update_offer
 
 1. type: 128.2 (`update_accept_ptlc`)
 2. data:
-  - `channel_id`: `channel_id
-  - `u64`: `id`
-  - `pubkey`: MuSig2 pubkey
-  - `66*byte`: MuSig2 pubnonce
-  - `32*byte`: MuSig2 partial signature
+   - `channel_id`: `channel_id
+   - `u64`: `id`
+   - `pubkey`: MuSig2 pubkey
+   - `66*byte`: MuSig2 pubnonce
+   - `32*byte`: MuSig2 partial signature
 
 ### `commitment_signed` Extensions
 
