@@ -1,4 +1,4 @@
-# Extension BOLT XX: Simple Taproot Channels
+# Extension BOLT XX: Point Timelock Contracts
 
 ## Abstract
 
