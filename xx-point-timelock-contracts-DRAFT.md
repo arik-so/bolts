@@ -59,10 +59,74 @@ the exchange of nonce pairs and the calculation of a linear combination.
 
 ## Messaging Changes
 
-The PTLC counterpart to `update_add_htlc` would be `update_add_ptlc`. However, there is added
-complexity stemming from the fact that a secret must be revealed by means of an arithmetic delta
-between two Schnorr signatures, which means that a closed PTLC commitment necessarily also
-incorporates one of the two signatures, specifically the "damaged" one, i. e. the Adaptor signature.
+As can be gleamed from the description above, the PTLC counterpart to `update_add_htlc` cannot
+be a single message, because we now require additional roundtrips in the protocol.
+
+I propose we split up the PTLC initialization into three messages: `update_offer_ptlc`,
+`update_accept_ptlc`, and `commitment_signed`.
+
+### `update_offer_ptlc`
+
+1. type: 128.1 (`update_offer_ptlc`)
+2. data:
+   - `channel_id`: `channel_id
+   - `u64`: `id`
+   - `u64`: `amount_msat`
+   - `u32`: `cltv_expiry`
+   - `pubkey`: PTLC commitment pubkey (e. g. `A+B+C+Z`)
+   - `pubkey`: MuSig2 pubkey
+   - `66*byte`: MuSig2 pubnonce
+   - `1366*byte`: `onion_routing_packet`
+
+### `update_accept_ptlc`
+
+1. type: 128.2 (`update_accept_ptlc`)
+2. data:
+  - `channel_id`: `channel_id
+  - `u64`: `id`
+  - `pubkey`: MuSig2 pubkey
+  - `66*byte`: MuSig2 pubnonce
+  - `32*byte`: MuSig2 partial signature
+
+### `commitment_signed` Extensions
+
+1. `tlv_stream`: `commitment_signed_tlvs`
+2. types:
+   1. type: 10 (`ptlc_indexed_signature`)
+   2. data:
+      - `u32`: `ptlc_index` (TBD whether PTLCs and HTLCs should be indexed separately or jointly)
+      - `32*byte`: MuSig2 partial signature
+
+## Sphinx Changes
+
+### Hop Data Extensions
+
+1. `tlv_stream`: `tlv_payload
+2. types:
+   1. type 10 (`ptlc_secret`)
+   2. data:
+      - `32*byte`: `ptlc_secret` (e. g. the `d` sent from Alice to David)
 
 ## Script Changes
 
+The only script changes are to the `htlc_success`, now `ptlc_success` branch of the Taptree.
+
+### Offered PTLCs
+
+`ptlc_success`:
+
+```
+<ptlc_musig_pubkey> OP_CHECKSIGVERIFY
+<remote_ptlc_pubkey> OP_CHECKSIG
+OP_CHECKSEQUENCEVERIFY
+```
+
+### Accepted PTLCs
+
+`ptlc_success`:
+
+```
+<ptlc_musig_pubkey> OP_CHECKSIGVERIFY
+<local_ptlc_pubkey> OP_CHECKSIGVERIFY
+<remote_ptlc_pubkey> OP_CHECKSIG
+```
