@@ -38,6 +38,7 @@ Here's how such a scheme could look:
    - a MuSig2 partial signature: `s_d = h(R_c + R_d + A+B+C+Z || P_c + P_d || m) * x_d + r_d`
 3. Finally, Carol responds to Dave:
    - complementary MuSig2 partial signature: `s_c = h(R_c + R_d + A+B+C+Z || P_c + P_d || m) * x_c`
+4. Now Dave can perform that same Dance with Emily.
 
 Carol and Dave now both have the complete signature where the following holds:
 
