@@ -25,15 +25,14 @@ she, in turn, received from Bob, we must work with Adaptor signatures, which mea
 one signature set up beforehand, which does not open the commitment, and one signature afterwards
 that does. The delta between those signatures must be fixed beforehand.
 
-Here's how such a scheme could look:
+In such a scheme, Carol could send Dave the following:
 
-1. Carol sends Dave the following:
 - `A + B + C + Z`: the PTLC point that Dave will need to open
 - `P`: a random pubkey where `P = x * G`
 - `R`: a random nonce
 - an Adaptor signature `s' = h(R || P + A+B+C+Z || m) * x + r`
 
-Dave now has an Adaptor signature where the following holds true:
+Dave now has an Adaptor signature `s'` where the following holds true:
 
 - `s'` is not a valid signature
 - `h(R || P + A+B+C+Z || m) * (P + A+B+C+Z) + R - (s' * G) = h(R || P + A+B+C+Z || m) * (A+B+C+Z)`
