@@ -52,7 +52,7 @@ commitment. Let's call it `unique_ptlc_pubkey`.
 
 ## Messaging Changes
 
-### `update_offer_ptlc`
+### `update_add_ptlc`
 
 1. type: 128.5 (`update_offer_ptlc`)
 2. data:
@@ -62,7 +62,7 @@ commitment. Let's call it `unique_ptlc_pubkey`.
    - `u32`: `cltv_expiry`
    - `pubkey`: PTLC commitment pubkey (e. g. `A+B+C+Z`)
    - `pubkey`: `random_ptlc_pubkey`
-   - `pubkey`: `random_ptlc_nonce`
+   - `64*byte`: Schnorr signature comprised of `s' || R`, i. e. the Adaptor signature integer and the random nonce
    - `1366*byte`: `onion_routing_packet`
 
 ## Sphinx Changes
