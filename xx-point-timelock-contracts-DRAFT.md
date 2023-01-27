@@ -57,7 +57,7 @@ commitment. Let's call it `unique_ptlc_pubkey`.
 
 1. type: 128.5 (`update_offer_ptlc`)
 2. data:
-   - `channel_id`: `channel_id
+   - `channel_id`: `channel_id`
    - `u64`: `id`
    - `u64`: `amount_msat`
    - `u32`: `cltv_expiry`
