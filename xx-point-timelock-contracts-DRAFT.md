@@ -116,7 +116,8 @@ The only script changes are to the `htlc_success`, now `ptlc_success` branch of 
 `ptlc_success`:
 
 ```
-<ptlc_musig_pubkey> OP_CHECKSIG
+<ptlc_musig_pubkey> OP_CHECKSIGVERIFY // SIGHASH_ANYONECANPAY
+<remote_htlc_pubkey> OP_CHECKSIG // SIGHASH_ALL
 OP_CHECKSEQUENCEVERIFY
 ```
 
@@ -131,7 +132,8 @@ the need to check individual parties' signature is obviated, so we can remove
 `ptlc_success`:
 
 ```
-<ptlc_musig_pubkey> OP_CHECKSIG
+<ptlc_musig_pubkey> OP_CHECKSIGVERIFY // SIGHASH_ANYONECANPAY
+<remote_htlc_pubkey> OP_CHECKSIG // SIGHASH_ALL
 ```
 
 #### Rationale
