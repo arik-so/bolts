@@ -116,29 +116,29 @@ The only script changes are to the `htlc_success`, now `ptlc_success` branch of 
 `ptlc_success`:
 
 ```
-<ptlc_musig_pubkey> OP_CHECKSIGVERIFY // SIGHASH_ANYONECANPAY
-<remote_htlc_pubkey> OP_CHECKSIG // SIGHASH_ALL
+<ptlc_musig_pubkey> OP_CHECKSIGVERIFY // SIGHASH_SINGLE | SIGHASH_ANYONECANPAY
+<remote_ptlc_pubkey> OP_CHECKSIG // SIGHASH_ALL
 OP_CHECKSEQUENCEVERIFY
 ```
 
 #### Rationale
 
-Because the PTLC MuSig2 signature requires buy-in from both the local and the remote parties,
+~~Because the PTLC MuSig2 signature requires buy-in from both the local and the remote parties,
 the need to check individual parties' signature is obviated, so we can remove
-`<remote_ptlc_pubkey> OP_CHECKSIG`.
+`<remote_ptlc_pubkey> OP_CHECKSIG`.~~
 
 ### Accepted PTLCs
 
 `ptlc_success`:
 
 ```
-<ptlc_musig_pubkey> OP_CHECKSIGVERIFY // SIGHASH_ANYONECANPAY
-<remote_htlc_pubkey> OP_CHECKSIG // SIGHASH_ALL
+<ptlc_musig_pubkey> OP_CHECKSIGVERIFY // SIGHASH_SINGLE | SIGHASH_ANYONECANPAY
+<local_ptlc_pubkey> OP_CHECKSIG // SIGHASH_ALL
 ```
 
 #### Rationale
 
-Because the PTLC MuSig2 signature requires buy-in from both the local and the remote parties,
+~~Because the PTLC MuSig2 signature requires buy-in from both the local and the remote parties,
 the need to check individual parties' signature is obviated, so we can remove
 `<local_ptlc_pubkey> OP_CHECKSIGVERIFY` and `<remote_ptlc_pubkey> OP_CHECKSIG`, and can instead
-make the PTLC's check an `OP_CHECKSIG` instead of an `OP_CHECKSIGVERIFY`.
+make the PTLC's check an `OP_CHECKSIG` instead of an `OP_CHECKSIGVERIFY`.~~
