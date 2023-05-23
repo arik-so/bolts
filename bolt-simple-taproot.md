@@ -326,6 +326,21 @@ in order to be able to re-use the existing 64-byte signature field, partial
 signatures are also encoded with 64 bytes by also encoding the x-coordinate of
 the _final_ nonce (`R1+b*R2`).
 
+### Nothing Up My Sleeves Points
+
+Whenever we want to ensure that a given P2TR can _only_ be spent via a script
+path, we utilize a Nothing Up My Sleeve (NUMs) point. A NUMs point is an EC
+point that no one knows the private key to. If no one knows the private key,
+then it can't be used for key path signing, forcing the script path to always
+be taken.
+
+We refer to the `simple_taproot_nums` as the following value:
+```
+02dca094751109d0bd055d03565874e8276dd53e926b44e3bd1bb6bf4bc130a279
+```
+
+The value was [generated using this tool](https://github.com/lightninglabs/lightning-node-connect/tree/master/mailbox/numsgen), with the seed phrase "Lightning Simple Taproot".
+
 ## Design Overview
 
 With the preliminaries out of the way, we provide a brief overview of the
@@ -799,16 +814,20 @@ As with base channels, the `nSequence` field must be set to `to_self_delay`.
 
 As we inherit the anchor output semantics we want to ensure that the remote
 party can unilaterally sweep their funds after the 1 block CSV delay. In order
-to achieve this property, we'll re-use the `_funding_key` here: its in
-the best interest of the other party to enforce these semantics (mempool
-pinning mitigation), so the remote party will be forced to always take the
-script reveeal path.
+to achieve this property, we'll utilize a NUMs point (`simple_taproot_nums`) By
+using this point as the internal key, we ensure that the remote party isn't
+able to by pass the CSV delay.
+
+Using a NUMs key has a key benefit: the static internal key allows the remote
+party to scan for their output on chain, which is useful for various recovery
+scenarios.
 
 The to remote output has the following form:
 
   * `OP_1 to_remote_output_key`
   * where:
-    * `to_remote_output_key = combined_funding_key + tagged_hash("TapTweak", combined_funding_key || to_remote_script_root)`
+    * `taproot_nums_point = 0245b18183a06ee58228f07d9716f0f121cd194e4d924b037522503a7160432f15`
+    * `to_remote_output_key = taproot_nums_point + tagged_hash("TapTweak", taproot_nums_point || to_remote_script_root)`
     * `to_remote_script_root = tapscript_root([to_remote_script])`
     * `to_remote_script` is the remote script:
         ```
