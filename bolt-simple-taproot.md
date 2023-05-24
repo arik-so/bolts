@@ -329,7 +329,7 @@ the _final_ nonce (`R1+b*R2`).
 ### Nothing Up My Sleeves Points
 
 Whenever we want to ensure that a given P2TR can _only_ be spent via a script
-path, we utilize a Nothing Up My Sleeve (NUMs) point. A NUMs point is an EC
+path, we utilize a Nothing Up My Sleeve (NUMS) point. A NUMS point is an EC
 point that no one knows the private key to. If no one knows the private key,
 then it can't be used for key path signing, forcing the script path to always
 be taken.
@@ -764,43 +764,53 @@ any keys aggregated via musig2 also are assumed to use the `KeySort` routine
 #### To Local Outputs
 
 For the simple taproot commitment type, we use the same flow of revocation or
-delay, but instead left the revocation case into the taproot key-spend case.
+delay, while re-using the NUMS point to ensure that the internal key is always
+revealed. This ensures that the anchor outputs can _always_ be spent given
+chain revelead information. For the remote party, the `remotepubkey` will be
+revealed once the remote party sweeps. For the local party, we ensure that the
+`local_delayedpubkey` is revealed with an extra noop data push.
 
 The new output has the following form:
 
   * `OP_1 to_local_output_key`
   * where:
-    * `to_local_output_key = revocationpubkey + tagged_hash("TapTweak", revocationpubkey || to_delay_script_root)`
-    * `to_delay_script_root = tapscript_root([to_delay_script])`
+    * `to_local_output_key = taproot_nums_point + tagged_hash("TapTweak", taproot_nums_point || to_delay_script_root)`
+    * `to_delay_script_root = tapscript_root([to_delay_script, revoke_script])`
     * `to_delay_script` is the delay script:
         ```
         <local_delayedpubkey> OP_CHECKSIG
         <to_self_delay> OP_CHECKSEQUENCEVERIFY OP_DROP
+    * `revoke_script` is the delay script:
+        ```
+        <local_delayedpubkey> OP_DROP
+        <revocation_pubkey> OP_CHECKSIG
+        ```
         ```
 
 The parity (even or odd) of the y-coordinate of the derived
 `to_local_output_key` MUST be known in order to derive a valid control block.
 
 The `tapscript_root` routine constructs a valid taproot commitment according to
-BIP 341+342. Namely, a leaf version of `0xc0` MUST be used. As there's only a
-single script, one can derive the tapscript root as:
-```
-tapscript_root = tagged_hash("TapLeaf", 0xc0 || compact_size_of(to_delay_script) || to_delay_script)
-```
+BIP 341+342. Namely, a leaf version of `0xc0` MUST be used. 
 
 In the case of a commitment breach, the `to_delay_script_root` can be used
 along side `<revocationpubkey>` to derive the private key needed to sweep the
-top-level key spend path. A valid witness is then just:
+top-level key spend path. The control block can be crafted as such:
 ```
-<revocation_sig>
+revoke_control_block = (output_key_y_parity | 0xc0) || taproot_nums_point || sha256(TapLeaf(to_delay_script))
+```
+
+A valid witness is then:
+```
+<revoke_sig> <revoke_script> <revoke_control_block>
 ```
 
 In the case of a routine force close, the script path must be revealed so the
 broadcaster can sweep their funds after a delay. The control block to spend is
 only `33` bytes, as it just includes the internal key (along with the y-parity
 bit and leaf version):
-```
-delay_control_block = (output_key_y_parity | 0xc0) || revocationpubkey
+``` 
+delay_control_block = (output_key_y_parity | 0xc0) || taproot_nums-point || sha256(TapLeaf(revoke_script))
 ```
 
 A valid witness is then:
@@ -814,11 +824,11 @@ As with base channels, the `nSequence` field must be set to `to_self_delay`.
 
 As we inherit the anchor output semantics we want to ensure that the remote
 party can unilaterally sweep their funds after the 1 block CSV delay. In order
-to achieve this property, we'll utilize a NUMs point (`simple_taproot_nums`) By
+to achieve this property, we'll utilize a NUMS point (`simple_taproot_nums`) By
 using this point as the internal key, we ensure that the remote party isn't
 able to by pass the CSV delay.
 
-Using a NUMs key has a key benefit: the static internal key allows the remote
+Using a NUMS key has a key benefit: the static internal key allows the remote
 party to scan for their output on chain, which is useful for various recovery
 scenarios.
 
