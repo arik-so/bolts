@@ -842,7 +842,7 @@ The to remote output has the following form:
     * `to_remote_script` is the remote script:
         ```
         <remotepubkey> OP_CHECKSIG
-        OP_CHECKSEQUENCEVERIFY
+        1 OP_CHECKSEQUENCEVERIFY OP_DROP
         ```
 
 This output can be swept by the remote party with the following witness:
@@ -909,7 +909,7 @@ An offered HTLC has the following form:
         ```
         OP_SIZE 32 OP_EQUALVERIFY OP_HASH160 <RIPEMD160(payment_hash)> OP_EQUALVERIFY
         <remote_htlcpubkey> OP_CHECKSIG
-        OP_CHECKSEQUENCEVERIFY
+        1 OP_CHECKSEQUENCEVERIFY OP_DROP
         ```
 
 In order to spend a offered HTLC, via either script path, an `inclusion_proof`
@@ -927,7 +927,7 @@ Accepted HTLCs inherit a similar format:
     * `htlc_timeout`:
         ```
         <remote_htlcpubkey> OP_CHECKSIG
-        OP_CHECKSEQUENCEVERIFY
+        1 OP_CHECKSEQUENCEVERIFY OP_DROP
         <cltv_expiry> OP_CHECKLOCKTIMEVERIFY OP_DROP
         ```
     * `htlc_success`:
