@@ -318,6 +318,21 @@ with the 66-byte-encoding of the public nonce used to sign remote commitments:
 s || point_1 || point_2
 ```
 
+### Nothing Up My Sleeves Points
+
+Whenever we want to ensure that a given P2TR can _only_ be spent via a script
+path, we utilize a Nothing Up My Sleeve (NUMS) point. A NUMS point is an EC
+point that no one knows the private key to. If no one knows the private key,
+then it can't be used for key path signing, forcing the script path to always
+be taken.
+
+We refer to the `simple_taproot_nums` as the following value:
+```
+02dca094751109d0bd055d03565874e8276dd53e926b44e3bd1bb6bf4bc130a279
+```
+
+The value was [generated using this tool](https://github.com/lightninglabs/lightning-node-connect/tree/master/mailbox/numsgen), with the seed phrase "Lightning Simple Taproot".
+
 ## Design Overview
 
 With the preliminaries out of the way, we provide a brief overview of the
@@ -891,43 +906,53 @@ any keys aggregated via musig2 also are assumed to use the `KeySort` routine
 #### To Local Outputs
 
 For the simple taproot commitment type, we use the same flow of revocation or
-delay, but instead left the revocation case into the taproot key-spend case.
+delay, while re-using the NUMS point to ensure that the internal key is always
+revealed (script path always taken). This ensures that the anchor outputs can
+_always_ be spent given chain revealed information. For the remote party, the
+`remotepubkey` will be revealed once the remote party sweeps. For the local
+party, we ensure that the `local_delayedpubkey` is revealed with an extra noop
+data push.
 
 The new output has the following form:
 
   * `OP_1 to_local_output_key`
   * where:
-    * `to_local_output_key = revocationpubkey + tagged_hash("TapTweak", revocationpubkey || to_delay_script_root)`
-    * `to_delay_script_root = tapscript_root([to_delay_script])`
+    * `to_local_output_key = taproot_nums_point + tagged_hash("TapTweak", taproot_nums_point || to_delay_script_root)`
+    * `to_delay_script_root = tapscript_root([to_delay_script, revoke_script])`
     * `to_delay_script` is the delay script:
         ```
         <local_delayedpubkey> OP_CHECKSIG
         <to_self_delay> OP_CHECKSEQUENCEVERIFY OP_DROP
+    * `revoke_script` is the delay script:
+        ```
+        <local_delayedpubkey> OP_DROP
+        <revocation_pubkey> OP_CHECKSIG
         ```
 
 The parity (even or odd) of the y-coordinate of the derived
 `to_local_output_key` MUST be known in order to derive a valid control block.
 
 The `tapscript_root` routine constructs a valid taproot commitment according to
-BIP 341+342. Namely, a leaf version of `0xc0` MUST be used. As there's only a
-single script, one can derive the tapscript root as:
-```
-tapscript_root = tagged_hash("TapLeaf", 0xc0 || compact_size_of(to_delay_script) || to_delay_script)
-```
+BIP 341+342. Namely, a leaf version of `0xc0` MUST be used. 
 
 In the case of a commitment breach, the `to_delay_script_root` can be used
 along side `<revocationpubkey>` to derive the private key needed to sweep the
-top-level key spend path. A valid witness is then just:
+top-level key spend path. The control block can be crafted as such:
 ```
-<revocation_sig>
+revoke_control_block = (output_key_y_parity | 0xc0) || taproot_nums_point || revoke_script
+```
+
+A valid witness is then:
+```
+<revoke_sig> <revoke_script> <revoke_control_block>
 ```
 
 In the case of a routine force close, the script path must be revealed so the
 broadcaster can sweep their funds after a delay. The control block to spend is
 only `33` bytes, as it just includes the internal key (along with the y-parity
 bit and leaf version):
-```
-delay_control_block = (output_key_y_parity | 0xc0) || revocationpubkey
+``` 
+delay_control_block = (output_key_y_parity | 0xc0) || taproot_nums-point || to_delay_srcipt
 ```
 
 A valid witness is then:
@@ -941,21 +966,25 @@ As with base channels, the `nSequence` field must be set to `to_self_delay`.
 
 As we inherit the anchor output semantics we want to ensure that the remote
 party can unilaterally sweep their funds after the 1 block CSV delay. In order
-to achieve this property, we'll re-use the `_funding_key` here: its in
-the best interest of the other party to enforce these semantics (mempool
-pinning mitigation), so the remote party will be forced to always take the
-script reveeal path.
+to achieve this property, we'll utilize a NUMS point (`simple_taproot_nums`) By
+using this point as the internal key, we ensure that the remote party isn't
+able to by pass the CSV delay.
+
+Using a NUMS key has a key benefit: the static internal key allows the remote
+party to scan for their output on chain, which is useful for various recovery
+scenarios.
 
 The to remote output has the following form:
 
   * `OP_1 to_remote_output_key`
   * where:
-    * `to_remote_output_key = combined_funding_key + tagged_hash("TapTweak", combined_funding_key || to_remote_script_root)`
+    * `taproot_nums_point = 0245b18183a06ee58228f07d9716f0f121cd194e4d924b037522503a7160432f15`
+    * `to_remote_output_key = taproot_nums_point + tagged_hash("TapTweak", taproot_nums_point || to_remote_script_root)`
     * `to_remote_script_root = tapscript_root([to_remote_script])`
     * `to_remote_script` is the remote script:
         ```
         <remotepubkey> OP_CHECKSIG
-        OP_CHECKSEQUENCEVERIFY
+        1 OP_CHECKSEQUENCEVERIFY OP_DROP
         ```
 
 This output can be swept by the remote party with the following witness:
@@ -1022,7 +1051,7 @@ An offered HTLC has the following form:
         ```
         OP_SIZE 32 OP_EQUALVERIFY OP_HASH160 <RIPEMD160(payment_hash)> OP_EQUALVERIFY
         <remote_htlcpubkey> OP_CHECKSIG
-        OP_CHECKSEQUENCEVERIFY
+        1 OP_CHECKSEQUENCEVERIFY OP_DROP
         ```
 
 In order to spend a offered HTLC, via either script path, an `inclusion_proof`
@@ -1040,7 +1069,7 @@ Accepted HTLCs inherit a similar format:
     * `htlc_timeout`:
         ```
         <remote_htlcpubkey> OP_CHECKSIG
-        OP_CHECKSEQUENCEVERIFY
+        1 OP_CHECKSEQUENCEVERIFY OP_DROP
         <cltv_expiry> OP_CHECKLOCKTIMEVERIFY OP_DROP
         ```
     * `htlc_success`:
