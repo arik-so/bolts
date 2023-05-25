@@ -765,10 +765,11 @@ any keys aggregated via musig2 also are assumed to use the `KeySort` routine
 
 For the simple taproot commitment type, we use the same flow of revocation or
 delay, while re-using the NUMS point to ensure that the internal key is always
-revealed. This ensures that the anchor outputs can _always_ be spent given
-chain revelead information. For the remote party, the `remotepubkey` will be
-revealed once the remote party sweeps. For the local party, we ensure that the
-`local_delayedpubkey` is revealed with an extra noop data push.
+revealed (script path always taken). This ensures that the anchor outputs can
+_always_ be spent given chain revealed information. For the remote party, the
+`remotepubkey` will be revealed once the remote party sweeps. For the local
+party, we ensure that the `local_delayedpubkey` is revealed with an extra noop
+data push.
 
 The new output has the following form:
 
@@ -785,7 +786,6 @@ The new output has the following form:
         <local_delayedpubkey> OP_DROP
         <revocation_pubkey> OP_CHECKSIG
         ```
-        ```
 
 The parity (even or odd) of the y-coordinate of the derived
 `to_local_output_key` MUST be known in order to derive a valid control block.
@@ -797,7 +797,7 @@ In the case of a commitment breach, the `to_delay_script_root` can be used
 along side `<revocationpubkey>` to derive the private key needed to sweep the
 top-level key spend path. The control block can be crafted as such:
 ```
-revoke_control_block = (output_key_y_parity | 0xc0) || taproot_nums_point || sha256(TapLeaf(to_delay_script))
+revoke_control_block = (output_key_y_parity | 0xc0) || taproot_nums_point || revoke_script
 ```
 
 A valid witness is then:
@@ -810,7 +810,7 @@ broadcaster can sweep their funds after a delay. The control block to spend is
 only `33` bytes, as it just includes the internal key (along with the y-parity
 bit and leaf version):
 ``` 
-delay_control_block = (output_key_y_parity | 0xc0) || taproot_nums-point || sha256(TapLeaf(revoke_script))
+delay_control_block = (output_key_y_parity | 0xc0) || taproot_nums-point || to_delay_srcipt
 ```
 
 A valid witness is then:
