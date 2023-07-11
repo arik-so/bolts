@@ -69,7 +69,7 @@ commitment. Let's call it `unique_ptlc_pubkey`.
 
 ### Hop Data Extensions
 
-1. `tlv_stream`: `tlv_payload
+1. `tlv_stream`: `tlv_payload`
 2. types:
    1. type 10 (`ptlc_secret`)
    2. data:
