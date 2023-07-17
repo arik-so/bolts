@@ -441,42 +441,6 @@ TLV type that houses the `musig2` public nonces.
 
 We add `option_taproot` to the set of defined channel types.
 
-#### `open_channel` Extensions
-
-1. `tlv_stream`: `open_channel_tlvs`
-2. types:
-   1. type: 4 (`next_local_nonce`)
-   2. data:
-      * [`66*byte`:`public_nonce`]
-
-##### Requirements
-
-The sending node:
-
-  - MUST specify the `next_local_nonce` field.
-  - MUST use the `NonceGen` algorithm defined in `bip-musig2` to generate
-    `next_local_nonce` to ensure it generates nonces in a safe manner.
-
-The receiving node MUST fail the channel if:
-
-  - the message doesn't include a `next_local_nonce` value.
-
-  - the specified public nonce cannot be parsed as two compressed secp256k1
-    points
-
-##### Rationale
-
-For the initial Taproot channel type (`option_taproot`), musig2 nonces
-must be exchanged in the first round trip (open->, <-accept) to ensure that the
-initiator is able to generate a valid musig2 partial signature at the next
-step once the transaction to be signed is fully specified.
-
-The `next_local_nonce` field will be used to verify incoming commitment
-signatures. Each incoming signature will carry the newly generated nonce used
-to sign the commitment transaction. At force close broadcast time, the
-verification nonce is then used to sign the local party's commitment
-transaction.
-
 #### `accept_channel` Extensions
 
 1. `tlv_stream`: `accept_channel_tlvs`
@@ -506,6 +470,9 @@ The recipient:
    1. type: 2 (`partial_signature_with_nonce`)
    2. data:
       * [`98*byte`: `partial_signature || public_nonce`]
+   3. type: 4 (`next_local_nonce`)
+   4. data:
+      * [`66*byte`:`public_nonce`]
 
 ##### Requirements
 
