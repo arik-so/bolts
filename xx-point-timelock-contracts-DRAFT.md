@@ -59,6 +59,8 @@ the exchange of nonce pairs and the calculation of a linear combination.
 
 ## Messaging Changes
 
+![](./figma_ptlc_messaging.png)
+
 As can be gleamed from the description above, the PTLC counterpart to `update_add_htlc` cannot
 be a single message, because we now require additional roundtrips in the protocol.
 
